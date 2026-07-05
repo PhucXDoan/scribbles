@@ -1,13 +1,24 @@
 package main
 
 import "core:fmt"
+import "core:strings"
 import "core:math"
+import "core:math/ease"
+import "core:reflect"
 import "vendor:raylib"
 
 
 
-SCREEN_WIDTH  : i32 : 800
-SCREEN_HEIGHT : i32 : 450
+rgba_lerp :: proc(a : raylib.Color, b : raylib.Color, t : f32) -> raylib.Color {
+    return raylib.Color {
+        u8(math.lerp(f32(a.r), f32(b.r), t)),
+        u8(math.lerp(f32(a.g), f32(b.g), t)),
+        u8(math.lerp(f32(a.b), f32(b.b), t)),
+        u8(math.lerp(f32(a.a), f32(b.a), t)),
+    }
+}
+
+
 
 main :: proc() {
 
@@ -17,10 +28,11 @@ main :: proc() {
 
     raylib.SetTraceLogLevel(.WARNING)
     raylib.SetTargetFPS(60)
+    raylib.SetConfigFlags({ .MSAA_4X_HINT })
 
     raylib.InitWindow(
-        SCREEN_WIDTH,
-        SCREEN_HEIGHT,
+        1200,
+        675,
         "scribbles"
     )
     defer raylib.CloseWindow()
@@ -65,6 +77,63 @@ main :: proc() {
 
 
 
+    ////////////////////////////////////////////////////////////////////////////////
+    //
+    // Screen Buttons.
+    //
+
+
+
+    SCREEN_BUTTON_FONT_SIZE :: 30
+
+    Screen_Option :: enum {
+        Roly,
+        Draw,
+        Shop,
+    }
+
+    Screen_Button :: struct {
+        text            : cstring,
+        text_width      : f32,
+        text_height     : f32,
+        center_x        : f32,
+        center_y        : f32,
+        base_box_width  : f32,
+        base_box_height : f32,
+        hover_t         : f32,
+    }
+
+    screen_buttons : [Screen_Option]Screen_Button
+
+    for &screen_button, screen_button_i in screen_buttons {
+
+        screen_button.text = strings.clone_to_cstring(reflect.enum_name_from_value(Screen_Option(screen_button_i)) or_else panic("Invalid."))
+
+        measurement := raylib.MeasureTextEx(raylib.GetFontDefault(), screen_button.text, SCREEN_BUTTON_FONT_SIZE, SCREEN_BUTTON_FONT_SIZE / f32(raylib.GetFontDefault().baseSize))
+
+        screen_button.text_width      = measurement.x
+        screen_button.text_height     = measurement.y
+        screen_button.center_x        = (f32(screen_button_i) + 1) * f32(raylib.GetScreenWidth()) / (f32(len(Screen_Option)) + 1)
+        screen_button.center_y        = f32(raylib.GetScreenHeight()) - 35
+        screen_button.base_box_width  = measurement.x * 1.5
+        screen_button.base_box_height = measurement.y * 1.5
+
+    }
+
+    defer {
+        for screen_button in screen_buttons {
+            defer delete(screen_button.text)
+        }
+    }
+
+
+
+    ////////////////////////////////////////////////////////////////////////////////
+
+
+
+
+
     // Main loop.
 
     Mode :: enum {
@@ -78,6 +147,7 @@ main :: proc() {
     time_since_last_click := cast(f32) 0.0
     friend_animation_t    := cast(f32) 0.0
     friend_x              := cast(f32) 100.0
+    points                := 0
 
     for !raylib.WindowShouldClose() {
 
@@ -110,14 +180,16 @@ main :: proc() {
                 is_hovering = raylib.CheckCollisionPointRec(
                     mouse_position,
                     raylib.Rectangle{
-                        cast(f32) SCREEN_WIDTH  / 2.0 - cast(f32) rolypoly_texture.width  / 2.0,
-                        cast(f32) SCREEN_HEIGHT / 2.0 - cast(f32) rolypoly_texture.height / 2.0,
+                        cast(f32) raylib.GetScreenWidth()  / 2.0 - cast(f32) rolypoly_texture.width  / 2.0,
+                        cast(f32) raylib.GetScreenHeight() / 2.0 - cast(f32) rolypoly_texture.height / 2.0,
                         cast(f32) rolypoly_texture.width,
                         cast(f32) rolypoly_texture.height,
                     },
                 )
 
                 if is_hovering && raylib.IsMouseButtonPressed(.LEFT) {
+
+                    points += 1
 
                     rolypoly_animating   = true
                     rolypoly_animation_t = 0.0
@@ -165,6 +237,85 @@ main :: proc() {
 
 
 
+            ////////////////////////////////////////
+            //
+            // Update screen buttons.
+            //
+
+            for &screen_button, screen_button_i in screen_buttons {
+
+                hovering_screen_button := raylib.CheckCollisionPointRec(
+                    mouse_position,
+                    {
+                        screen_button.center_x - screen_button.base_box_width  / 2,
+                        screen_button.center_y - screen_button.base_box_height / 2,
+                        screen_button.base_box_width,
+                        screen_button.base_box_height,
+                    }
+                )
+
+                if hovering_screen_button {
+                    screen_button.hover_t += raylib.GetFrameTime() / 0.1
+                } else {
+                    screen_button.hover_t -= raylib.GetFrameTime() / 0.1
+                }
+
+                screen_button.hover_t = clamp(screen_button.hover_t, 0, 1)
+
+                if hovering_screen_button && raylib.IsMouseButtonPressed(.LEFT) {
+
+                    screen_button.hover_t = 0
+
+                    switch screen_button_i {
+
+                        case .Roly: {
+                            mode = .Main
+                        }
+
+                        case .Draw: {
+                            mode = .Drawing
+                        }
+
+                        case .Shop: {
+                            fmt.printf("TODO\n")
+                        }
+
+                        case: panic("Invalid")
+
+                    }
+
+                }
+
+            }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            ////////////////////////////////////////
+            //
+            // TODO.
+            //
+
+            text := fmt.ctprintf("Points: {}", points)
+            raylib.DrawText(
+                text,
+                10,
+                10,
+                20,
+                raylib.WHITE
+            )
+
+
             switch mode {
 
                 case .Main: {
@@ -178,8 +329,8 @@ main :: proc() {
                         cast(f32) rolypoly_texture.height * (k if rolypoly_animating else 1.0),
                     }
 
-                    dest.x = cast(f32) SCREEN_WIDTH  / 2.0 - dest.width  / 2.0
-                    dest.y = cast(f32) SCREEN_HEIGHT / 2.0 - dest.height / 2.0
+                    dest.x = cast(f32) raylib.GetScreenWidth()  / 2.0 - dest.width  / 2.0
+                    dest.y = cast(f32) raylib.GetScreenHeight() / 2.0 - dest.height / 2.0
 
                     raylib.DrawTexturePro(
                         texture  = rolypoly_texture,
@@ -238,8 +389,8 @@ main :: proc() {
                     // TODO.
 
                     canvas_center := raylib.Vector2 {
-                        cast(f32) SCREEN_WIDTH  / 2.0,
-                        cast(f32) SCREEN_HEIGHT / 2.0,
+                        cast(f32) raylib.GetScreenWidth()  / 2.0,
+                        cast(f32) raylib.GetScreenHeight() / 2.0,
                     }
 
                     canvas_dimensions := raylib.Vector2 {
@@ -322,8 +473,8 @@ main :: proc() {
                     // TODO.
 
                     submit_dest := raylib.Rectangle {
-                        650.0,
-                        200.0,
+                        f32(raylib.GetScreenWidth() ) * 0.75,
+                        f32(raylib.GetScreenHeight()) * 0.25,
                         100.0,
                         50.0,
                     }
@@ -361,33 +512,78 @@ main :: proc() {
 
 
 
-                    // TODO.
-
-                    {
-
-                        dest := raylib.Rectangle {
-                            mouse_position.x + 4.0,
-                            mouse_position.y + 10.0,
-                            cast(f32) cursor_texture.width,
-                            cast(f32) cursor_texture.height
-                        }
-
-                        raylib.DrawTexturePro(
-                            texture  = cursor_texture,
-                            source   = { 0.0, 0.0, cast(f32) cursor_texture.width, cast(f32) cursor_texture.height },
-                            dest     = dest,
-                            origin   = { dest.width / 2.0, dest.height / 2.0 },
-                            rotation = 150.0 if raylib.IsMouseButtonDown(.LEFT) else 160.0,
-                            tint     = raylib.WHITE,
-                        )
-
-                    }
 
                 }
 
             }
 
+
+
+            ////////////////////////////////////////
+            //
+            // Render screen buttons.
+            //
+
+            for screen_button in screen_buttons {
+
+                animation_scale   := math.lerp(f32(1), 1.1, ease.cubic_in_out(screen_button.hover_t))
+                actual_box_width  := screen_button.base_box_width  * animation_scale
+                actual_box_height := screen_button.base_box_height * animation_scale
+
+                raylib.DrawRectanglePro(
+                    rec = {
+                        screen_button.center_x,
+                        screen_button.center_y,
+                        actual_box_width,
+                        actual_box_height,
+                    },
+                    origin   = { actual_box_width / 2, actual_box_height / 2 },
+                    rotation = math.lerp(f32(0), -2, ease.cubic_in_out(screen_button.hover_t)),
+                    color    = rgba_lerp(raylib.BLACK, raylib.YELLOW, screen_button.hover_t),
+                )
+
+                raylib.DrawText(
+                    screen_button.text,
+                    i32(screen_button.center_x - screen_button.text_width  / 2),
+                    i32(screen_button.center_y - screen_button.text_height / 2),
+                    SCREEN_BUTTON_FONT_SIZE,
+                    rgba_lerp(raylib.WHITE, raylib.BLACK, screen_button.hover_t),
+                )
+
+            }
+
+
+
+            ////////////////////////////////////////
+            //
+            // Render cursor.
+            //
+
+            if mode == .Drawing {
+
+                dest := raylib.Rectangle {
+                    mouse_position.x + 4.0,
+                    mouse_position.y + 10.0,
+                    cast(f32) cursor_texture.width,
+                    cast(f32) cursor_texture.height
+                }
+
+                raylib.DrawTexturePro(
+                    texture  = cursor_texture,
+                    source   = { 0.0, 0.0, cast(f32) cursor_texture.width, cast(f32) cursor_texture.height },
+                    dest     = dest,
+                    origin   = { dest.width / 2.0, dest.height / 2.0 },
+                    rotation = 150.0 if raylib.IsMouseButtonDown(.LEFT) else 160.0,
+                    tint     = raylib.WHITE,
+                )
+
+            }
+
         }
+
+
+
+        free_all(context.temp_allocator)
 
     }
 
