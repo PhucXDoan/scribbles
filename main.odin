@@ -1,5 +1,7 @@
 package main
 
+import "core:fmt"
+import "core:math"
 import "vendor:raylib"
 
 
@@ -13,6 +15,9 @@ main :: proc() {
 
     // Set up Raylib.
 
+    raylib.SetTraceLogLevel(.WARNING)
+    raylib.SetTargetFPS(60)
+
     raylib.InitWindow(
         SCREEN_WIDTH,
         SCREEN_HEIGHT,
@@ -20,28 +25,29 @@ main :: proc() {
     )
     defer raylib.CloseWindow()
 
-    raylib.SetTargetFPS(60)
+    raylib.InitAudioDevice()
+    defer raylib.CloseAudioDevice()
 
 
 
     // TODO.
 
-    image := raylib.LoadImage("./media/pikmin.png")
+    image := raylib.LoadImage("./media/rolypoly.png")
     defer raylib.UnloadImage(image)
+
+    sound := raylib.LoadSound("./media/xylo.wav")
+    defer raylib.UnloadSound(sound)
 
     texture := raylib.LoadTextureFromImage(image)
     defer raylib.UnloadTexture(texture)
 
-    player_pos   := raylib.Vector2{400, 225}
-    player_size  := raylib.Vector2{50, 50}
-    player_speed : f32 = 5.0
-
-    texture_position  := raylib.Vector2{100.0, 100.0}
-    texture_size := raylib.Vector2{f32(texture.width), f32(texture.height)}
-
 
 
     // Main loop.
+
+    rolypoly_animating   := false
+    rolypoly_animation_t := cast(f32) 0.0
+    time_since_last_click  := cast(f32) 0.0
 
     for !raylib.WindowShouldClose() {
 
@@ -49,22 +55,45 @@ main :: proc() {
 
         // Process inputs.
 
-        if raylib.IsKeyDown(.LEFT)  || raylib.IsKeyDown(.A) { player_pos.x -= player_speed }
-        if raylib.IsKeyDown(.RIGHT) || raylib.IsKeyDown(.D) { player_pos.x += player_speed }
-        if raylib.IsKeyDown(.UP)    || raylib.IsKeyDown(.W) { player_pos.y -= player_speed }
-        if raylib.IsKeyDown(.DOWN)  || raylib.IsKeyDown(.S) { player_pos.y += player_speed }
-
         mouse_position := raylib.GetMousePosition()
 
         is_hovering := raylib.CheckCollisionPointRec(
             mouse_position,
             raylib.Rectangle{
-                texture_position.x,
-                texture_position.y,
-                texture_size.x,
-                texture_size.y,
+                cast(f32) SCREEN_WIDTH  / 2.0 - cast(f32) texture.width  / 2.0,
+                cast(f32) SCREEN_HEIGHT / 2.0 - cast(f32) texture.height / 2.0,
+                cast(f32) texture.width,
+                cast(f32) texture.height,
             },
         )
+
+        if is_hovering && raylib.IsMouseButtonPressed(.LEFT) {
+
+            rolypoly_animating   = true
+            rolypoly_animation_t = 0.0
+
+            raylib.PlaySound(sound)
+
+            raylib.SetSoundVolume(
+                sound,
+                min(max(cast(f32) raylib.GetTime() - time_since_last_click, 0.0), 1.0)
+            )
+
+            time_since_last_click = cast(f32) raylib.GetTime()
+
+        }
+
+
+        if rolypoly_animating {
+
+            rolypoly_animation_t += raylib.GetFrameTime() / 0.25
+
+            if rolypoly_animation_t > 1.0 {
+                rolypoly_animation_t = 0.0
+                rolypoly_animating   = false
+            }
+
+        }
 
 
 
@@ -77,23 +106,28 @@ main :: proc() {
 
             raylib.ClearBackground(raylib.DARKGRAY)
 
-            raylib.DrawText("Use WASD or Arrow Keys to move the player", 10, 10, 20, raylib.RAYWHITE)
 
-            raylib.DrawRectangleV(player_pos, player_size, raylib.MAROON)
 
-            raylib.DrawTextureV(
-                texture,
-                texture_position,
-                is_hovering ? raylib.YELLOW : raylib.WHITE,
+            k := 1 + 0.05 * (1 - math.sin(math.PI / 2 * rolypoly_animation_t))
+
+            dest := raylib.Rectangle {
+                0.0,
+                0.0,
+                cast(f32) texture.width  / (k if rolypoly_animating else 1.0),
+                cast(f32) texture.height * (k if rolypoly_animating else 1.0),
+            }
+
+            dest.x = cast(f32) SCREEN_WIDTH  / 2.0 - dest.width  / 2.0
+            dest.y = cast(f32) SCREEN_HEIGHT / 2.0 - dest.height / 2.0
+
+            raylib.DrawTexturePro(
+                texture  = texture,
+                source   = { 0.0, 0.0, cast(f32) texture.width, cast(f32) texture.height },
+                dest     = dest,
+                origin   = { 0.0, 0.0 },
+                rotation = 0.0,
+                tint     = is_hovering ? raylib.YELLOW : raylib.WHITE,
             )
-
-            mouse_text := raylib.TextFormat(
-                "Mouse: (%.0f, %.0f) - Hovering: %s",
-                mouse_position.x,
-                mouse_position.y,
-                is_hovering ? "YES" : "NO",
-            )
-            raylib.DrawText(mouse_text, 10, 40, 20, raylib.RAYWHITE)
 
         }
 
