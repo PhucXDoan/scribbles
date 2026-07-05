@@ -32,6 +32,9 @@ main :: proc() {
 
     // TODO.
 
+    submit_texture := raylib.LoadTexture("./media/submit.png")
+    defer raylib.UnloadTexture(submit_texture)
+
     rolypoly_image := raylib.LoadImage("./media/rolypoly.png")
     defer raylib.UnloadImage(rolypoly_image)
 
@@ -53,6 +56,13 @@ main :: proc() {
     canvas_texture := raylib.LoadTextureFromImage(canvas_image)
     defer raylib.UnloadTexture(canvas_texture)
 
+    friend_texture : Maybe(raylib.Texture)
+    defer  {
+        if friend_texture != nil {
+            raylib.UnloadTexture(friend_texture.?)
+        }
+    }
+
 
 
     // Main loop.
@@ -62,10 +72,12 @@ main :: proc() {
         Drawing,
     }
 
-    mode                  := Mode.Drawing
+    mode                  := Mode.Main
     rolypoly_animating    := false
     rolypoly_animation_t  := cast(f32) 0.0
     time_since_last_click := cast(f32) 0.0
+    friend_animation_t    := cast(f32) 0.0
+    friend_x              := cast(f32) 100.0
 
     for !raylib.WindowShouldClose() {
 
@@ -178,6 +190,45 @@ main :: proc() {
                         tint     = is_hovering ? raylib.YELLOW : raylib.WHITE,
                     )
 
+
+
+                    // TODO.
+
+                    friend_animation_t += raylib.GetFrameTime()
+                    friend_animation_t  = math.mod_f32(friend_animation_t, cast(f32) 1.0)
+
+                    friend_x += raylib.GetFrameTime() * 10.0
+
+                    friend_dest := raylib.Rectangle {
+                        friend_x,
+                        200.0,
+                        100.0,
+                        100.0,
+                    }
+
+                    friend_dest.width  /= 1 + 0.085 * math.sin(math.PI * friend_animation_t)
+                    friend_dest.height *= 1 + 0.125 * math.sin(math.PI * friend_animation_t)
+                    friend_dest.x       = friend_dest.x - friend_dest.width / 2.0
+                    friend_dest.y       = friend_dest.y - (friend_dest.height * 0.33 * math.sin(math.PI * friend_animation_t))
+
+                    if friend_texture != nil {
+
+                        raylib.DrawTexturePro(
+                            texture = friend_texture.?,
+                            source  = {
+                                0.0,
+                                0.0,
+                                cast(f32) friend_texture.?.width,
+                                cast(f32) friend_texture.?.height,
+                            },
+                            dest     = friend_dest,
+                            origin   = { 0.0, 0.0 },
+                            rotation = 0.0,
+                            tint     = raylib.WHITE,
+                        )
+
+                    }
+
                 }
 
                 case .Drawing: {
@@ -266,6 +317,46 @@ main :: proc() {
 
                     }
 
+
+
+                    // TODO.
+
+                    submit_dest := raylib.Rectangle {
+                        650.0,
+                        200.0,
+                        100.0,
+                        50.0,
+                    }
+
+                    submit_hovering := raylib.CheckCollisionPointRec(mouse_position, submit_dest)
+
+                    {
+
+                        raylib.DrawTexturePro(
+                            texture  = submit_texture,
+                            source   = { 0.0, 0.0, cast(f32) submit_texture.width, cast(f32) submit_texture.height },
+                            dest     = submit_dest,
+                            origin   = { 0.0, 0.0 },
+                            rotation = 0.0,
+                            tint     = raylib.GREEN if submit_hovering else raylib.WHITE,
+                        )
+
+                    }
+
+                    if submit_hovering && raylib.IsMouseButtonPressed(.LEFT) {
+
+                        if friend_texture != nil {
+                            raylib.UnloadTexture(friend_texture.?)
+                        }
+
+                        friend_texture = raylib.LoadTextureFromImage(canvas_image)
+
+                        raylib.ImageClearBackground(&canvas_image, raylib.SKYBLUE)
+                        raylib.UpdateTexture(canvas_texture, canvas_image.data)
+
+                        mode = .Main
+
+                    }
 
 
 
