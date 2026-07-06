@@ -9,6 +9,114 @@ import "vendor:raylib"
 
 
 
+////////////////////////////////////////////////////////////////////////////////
+//
+// Animation.
+//
+
+Animation :: struct {
+    duration : f32,
+    value    : f32,
+    running  : bool,
+    control  : Animation_Control,
+}
+
+Animation_Control :: enum {
+    Restart,
+    Cyclic,
+    Decrease,
+    Increase,
+}
+
+update_animation :: proc(animation : ^Animation) {
+
+    if animation.running {
+
+        switch animation.control {
+
+            case .Restart: {
+
+                animation.value += raylib.GetFrameTime() / animation.duration
+
+                if animation.value > 1 {
+                    animation.value   = 0
+                    animation.running = false
+                }
+
+            }
+
+            case .Cyclic: {
+                animation.value += raylib.GetFrameTime() / animation.duration
+                animation.value  = math.mod_f32(animation.value, 1)
+            }
+
+            case .Decrease: {
+                animation.value -= raylib.GetFrameTime() / animation.duration
+                animation.value  = clamp(animation.value, 0, 1)
+            }
+
+            case .Increase: {
+                animation.value += raylib.GetFrameTime() / animation.duration
+                animation.value  = clamp(animation.value, 0, 1)
+            }
+
+            case: panic("Invalid.")
+
+        }
+
+    }
+
+}
+
+control_animation :: proc(animation : ^Animation, control : Animation_Control) {
+
+    animation.control = control
+
+    switch control {
+
+        case .Restart: {
+            animation.value   = 0
+            animation.running = true
+        }
+
+        case .Cyclic: {
+            animation.running = true
+        }
+
+        case .Decrease: {
+            animation.running = true
+        }
+
+        case .Increase: {
+            animation.running = true
+        }
+
+        case: panic("Invalid.")
+
+    }
+
+}
+
+ease_animation :: proc(
+    start     : f32,
+    end       : f32,
+    animation : Animation,
+    easing    : ease.Ease = .Linear,
+) -> f32 {
+    return math.lerp(
+        start,
+        end,
+        ease.ease(easing, animation.value)
+    )
+}
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// Main.
+//
+
 main :: proc() {
 
 
@@ -31,165 +139,85 @@ main :: proc() {
 
 
 
-    // TODO.
-
-    submit_texture := raylib.LoadTexture("./media/submit.png")
-    defer raylib.UnloadTexture(submit_texture)
-
-    rolypoly_image := raylib.LoadImage("./media/rolypoly.png")
-    defer raylib.UnloadImage(rolypoly_image)
-
-    xylo_sound := raylib.LoadSound("./media/xylo.wav")
-    defer raylib.UnloadSound(xylo_sound)
-
-    padlock_sound := raylib.LoadSound("./media/padlock.wav")
-    defer raylib.UnloadSound(padlock_sound)
-
-    padlock_locked_sound := raylib.LoadSound("./media/padlock_locked.wav")
-    defer raylib.UnloadSound(padlock_locked_sound)
-
-    padlock_unlocked_sound := raylib.LoadSound("./media/padlock_unlocked.wav")
-    defer raylib.UnloadSound(padlock_unlocked_sound)
-
-    easel_open_sound := raylib.LoadSound("./media/easel_open.wav")
-    defer raylib.UnloadSound(easel_open_sound)
-
-    easel_close_sound := raylib.LoadSound("./media/easel_close.wav")
-    defer raylib.UnloadSound(easel_close_sound)
-
-    rolypoly_texture := raylib.LoadTextureFromImage(rolypoly_image)
-    defer raylib.UnloadTexture(rolypoly_texture)
-
-    cursor_image := raylib.LoadImage("./media/squid.png")
-    defer raylib.UnloadImage(cursor_image)
-
-    cursor_texture := raylib.LoadTextureFromImage(cursor_image)
-    defer raylib.UnloadTexture(cursor_texture)
-
-    friend_texture : Maybe(raylib.Texture)
-    defer  {
-        if friend_texture != nil {
-            raylib.UnloadTexture(friend_texture.?)
-        }
-    }
-
-    easel_texture := raylib.LoadTexture("./media/easel.png")
-    defer raylib.UnloadTexture(easel_texture)
-
-    padlock_texture := raylib.LoadTexture("./media/padlock.png")
-    defer raylib.UnloadTexture(padlock_texture)
-
-    font := raylib.LoadFontEx("./media/Sniglet.ttf", 96, nil, 0)
-    defer raylib.UnloadFont(font)
-
-
-
-    ////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////
     //
-    // Animation.
+    // Assets.
     //
 
-    Animation :: struct {
-        duration : f32,
-        value    : f32,
-        running  : bool,
-        control  : Animation_Control,
+    Asset_Texture :: enum {
+        nil,
+        Submit_Button,
+        Rolypoly,
+        Cursor,
+        Easel,
+        Padlock,
     }
 
-    Animation_Control :: enum {
-        Restart,
-        Cyclic,
-        Decrease,
-        Increase,
+    Asset_Sound :: enum {
+        nil,
+        Xylo,
+        Padlock,
+        Padlock_Locked,
+        Padlock_Unlocked,
+        Easel_Open,
+        Easel_Close,
     }
 
-    update_animation :: proc(animation : ^Animation) {
+    Asset_Font :: enum {
+        nil,
+        Sniglet,
+    }
 
-        if animation.running {
+    asset_textures := [Asset_Texture]raylib.Texture {}
 
-            switch animation.control {
-
-                case .Restart: {
-
-                    animation.value += raylib.GetFrameTime() / animation.duration
-
-                    if animation.value > 1 {
-                        animation.value   = 0
-                        animation.running = false
-                    }
-
-                }
-
-                case .Cyclic: {
-                    animation.value += raylib.GetFrameTime() / animation.duration
-                    animation.value  = math.mod_f32(animation.value, 1)
-                }
-
-                case .Decrease: {
-                    animation.value -= raylib.GetFrameTime() / animation.duration
-                    animation.value  = clamp(animation.value, 0, 1)
-                }
-
-                case .Increase: {
-                    animation.value += raylib.GetFrameTime() / animation.duration
-                    animation.value  = clamp(animation.value, 0, 1)
-                }
-
-                case: panic("Invalid.")
-
-            }
-
+    for &asset_texture, asset_texture_i in asset_textures {
+        if asset_texture_i != nil {
+            asset_texture = raylib.LoadTexture(fmt.ctprintf("./media/{}.png", reflect.enum_string(asset_texture_i)))
         }
-
     }
 
-    control_animation :: proc(animation : ^Animation, control : Animation_Control) {
-
-        animation.control = control
-
-        switch control {
-
-            case .Restart: {
-                animation.value   = 0
-                animation.running = true
-            }
-
-            case .Cyclic: {
-                animation.running = true
-            }
-
-            case .Decrease: {
-                animation.running = true
-            }
-
-            case .Increase: {
-                animation.running = true
-            }
-
-            case: panic("Invalid.")
-
+    defer for asset_texture, asset_texture_i in asset_textures {
+        if asset_texture_i != nil {
+            raylib.UnloadTexture(asset_texture)
         }
-
     }
 
-    ease_animation :: proc(
-        start     : f32,
-        end       : f32,
-        animation : Animation,
-        easing    : ease.Ease = .Linear,
-    ) -> f32 {
-        return math.lerp(
-            start,
-            end,
-            ease.ease(easing, animation.value)
-        )
+    asset_sounds := [Asset_Sound]raylib.Sound {}
+
+    for &asset_sound, asset_sound_i in asset_sounds {
+        if asset_sound_i != nil {
+            asset_sound = raylib.LoadSound(fmt.ctprintf("./media/{}.wav", reflect.enum_string(asset_sound_i)))
+        }
+    }
+
+    defer for asset_sound, asset_sound_i in asset_sounds {
+        if asset_sound_i != nil {
+            raylib.UnloadSound(asset_sound)
+        }
+    }
+
+    asset_fonts := [Asset_Font]raylib.Font {}
+
+    for &asset_font, asset_font_i in asset_fonts {
+        if asset_font_i != nil {
+            asset_font = raylib.LoadFontEx(
+                fileName       = fmt.ctprintf("./media/{}.ttf", reflect.enum_string(asset_font_i)),
+                fontSize       = 96,
+                codepoints     = nil,
+                codepointCount = 0,
+            )
+        }
+    }
+
+    defer for asset_font, asset_font_i in asset_fonts {
+        if asset_font_i != nil {
+            raylib.UnloadFont(asset_font)
+        }
     }
 
 
 
     ////////////////////////////////////////////////////////////////////////////////
-
-
 
 
 
@@ -220,6 +248,13 @@ main :: proc() {
     easel_canvas_texture := raylib.LoadTextureFromImage(easel_canvas_image)
     defer raylib.UnloadTexture(easel_canvas_texture)
 
+    friend_texture : Maybe(raylib.Texture)
+    defer  {
+        if friend_texture != nil {
+            raylib.UnloadTexture(friend_texture.?)
+        }
+    }
+
     for !raylib.WindowShouldClose() {
 
         mouse_position := raylib.GetMousePosition()
@@ -234,8 +269,8 @@ main :: proc() {
         rolypoly_dest := raylib.Rectangle {
             0.0,
             0.0,
-            cast(f32) rolypoly_texture.width,
-            cast(f32) rolypoly_texture.height,
+            cast(f32) asset_textures[.Rolypoly].width,
+            cast(f32) asset_textures[.Rolypoly].height,
         }
 
         if rolypoly_animation.running {
@@ -261,10 +296,10 @@ main :: proc() {
 
                 control_animation(&rolypoly_animation, .Restart)
 
-                raylib.PlaySound(xylo_sound)
+                raylib.PlaySound(asset_sounds[.Xylo])
 
                 raylib.SetSoundVolume(
-                    xylo_sound,
+                    asset_sounds[.Xylo],
                     min(max(cast(f32) raylib.GetTime() - time_since_last_click, 0.0), 1.0)
                 )
 
@@ -333,7 +368,7 @@ main :: proc() {
             if hovering_easel && raylib.IsMouseButtonPressed(.LEFT) {
 
                 mode = .Easel
-                raylib.PlaySound(easel_open_sound)
+                raylib.PlaySound(asset_sounds[.Easel_Open])
 
             }
 
@@ -342,9 +377,9 @@ main :: proc() {
             if (
                 old_easel_hover_animation_value <  0.5 &&
                 easel_hover_animation.value     >= 0.5 &&
-                !raylib.IsSoundPlaying(padlock_sound)
+                !raylib.IsSoundPlaying(asset_sounds[.Padlock])
             ) {
-                raylib.PlaySound(padlock_sound)
+                raylib.PlaySound(asset_sounds[.Padlock])
             }
 
             if easel_hover_animation.value == 1 && raylib.IsMouseButtonPressed(.LEFT) {
@@ -352,13 +387,13 @@ main :: proc() {
                 if pets < easel_cost {
 
                     control_animation(&easel_lockpad_click_animation, .Restart)
-                    raylib.PlaySound(padlock_locked_sound)
+                    raylib.PlaySound(asset_sounds[.Padlock_Locked])
 
                 } else {
 
                     pets           -= easel_cost
                     easel_unlocked  = true
-                    raylib.PlaySound(padlock_unlocked_sound)
+                    raylib.PlaySound(asset_sounds[.Padlock_Unlocked])
 
                 }
 
@@ -453,7 +488,7 @@ main :: proc() {
                 raylib.ImageClearBackground(&easel_canvas_image, easel_default_color)
 
                 mode = .Normal
-                raylib.PlaySound(easel_close_sound)
+                raylib.PlaySound(asset_sounds[.Easel_Close])
 
             }
 
@@ -483,7 +518,7 @@ main :: proc() {
             //
 
             raylib.DrawTextEx(
-                font     = font,
+                font     = asset_fonts[.Sniglet],
                 text     = fmt.ctprintf("Pets: {}", pets),
                 position = { 10, 10 },
                 fontSize = 40,
@@ -501,8 +536,8 @@ main :: proc() {
             if mode == .Normal {
 
                 raylib.DrawTexturePro(
-                    texture  = rolypoly_texture,
-                    source   = { 0.0, 0.0, cast(f32) rolypoly_texture.width, cast(f32) rolypoly_texture.height },
+                    texture  = asset_textures[.Rolypoly],
+                    source   = { 0.0, 0.0, cast(f32) asset_textures[.Rolypoly].width, cast(f32) asset_textures[.Rolypoly].height },
                     dest     = rolypoly_dest,
                     origin   = { 0.0, 0.0 },
                     rotation = 0.0,
@@ -564,8 +599,8 @@ main :: proc() {
             if mode == .Normal {
 
                 raylib.DrawTexturePro(
-                    texture  = easel_texture,
-                    source   = { 0, 0, cast(f32) easel_texture.width, cast(f32) easel_texture.height },
+                    texture  = asset_textures[.Easel],
+                    source   = { 0, 0, cast(f32) asset_textures[.Easel].width, cast(f32) asset_textures[.Easel].height },
                     dest     = easel_dest,
                     origin   = easel_origin,
                     rotation = 0,
@@ -585,8 +620,8 @@ main :: proc() {
                     easel_padlock_rotation += math.sin(ease_animation(0, 6, easel_lockpad_click_animation, .Cubic_Out)) * 10
 
                     raylib.DrawTexturePro(
-                        texture  = padlock_texture,
-                        source   = { 0, 0, cast(f32) padlock_texture.width, cast(f32) padlock_texture.height },
+                        texture  = asset_textures[.Padlock],
+                        source   = { 0, 0, cast(f32) asset_textures[.Padlock].width, cast(f32) asset_textures[.Padlock].height },
                         dest     = easel_padlock_dest,
                         origin   = { f32(easel_padlock_dest.width) / 2, f32(easel_padlock_dest.height) / 2 },
                         rotation = easel_padlock_rotation,
@@ -609,7 +644,7 @@ main :: proc() {
                         BUBBLE_DIALOG_OUTLINE   :: 4
 
                         measurement := raylib.MeasureTextEx(
-                            font     = font,
+                            font     = asset_fonts[.Sniglet],
                             text     = message,
                             fontSize = BUBBLE_DIALOG_FONT_SIZE,
                             spacing  = 0,
@@ -665,7 +700,7 @@ main :: proc() {
                         )
 
                         raylib.DrawTextEx(
-                            font     = font,
+                            font     = asset_fonts[.Sniglet],
                             text     = message,
                             position = {
                                 bubble_rectangle.x + BUBBLE_DIALOG_PADDING,
@@ -718,8 +753,8 @@ main :: proc() {
                 }
 
                 raylib.DrawTexturePro(
-                    texture  = submit_texture,
-                    source   = { 0.0, 0.0, f32(submit_texture.width), f32(submit_texture.height) },
+                    texture  = asset_textures[.Submit_Button],
+                    source   = { 0.0, 0.0, f32(asset_textures[.Submit_Button].width), f32(asset_textures[.Submit_Button].height) },
                     dest     = submit_button_dest,
                     origin   = submit_button_origin,
                     rotation = 0.0,
@@ -740,13 +775,13 @@ main :: proc() {
                 cursor_dest := raylib.Rectangle {
                     mouse_position.x + 4.0,
                     mouse_position.y + 10.0,
-                    cast(f32) cursor_texture.width,
-                    cast(f32) cursor_texture.height
+                    cast(f32) asset_textures[.Cursor].width,
+                    cast(f32) asset_textures[.Cursor].height
                 }
 
                 raylib.DrawTexturePro(
-                    texture  = cursor_texture,
-                    source   = { 0.0, 0.0, cast(f32) cursor_texture.width, cast(f32) cursor_texture.height },
+                    texture  = asset_textures[.Cursor],
+                    source   = { 0.0, 0.0, cast(f32) asset_textures[.Cursor].width, cast(f32) asset_textures[.Cursor].height },
                     dest     = cursor_dest,
                     origin   = { cursor_dest.width / 2.0, cursor_dest.height / 2.0 },
                     rotation = 150.0 if raylib.IsMouseButtonDown(.LEFT) else 160.0,
