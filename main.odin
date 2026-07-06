@@ -303,23 +303,29 @@ main :: proc() {
             easel_dest.height,
         }
 
+        hovering_easel := raylib.CheckCollisionPointRec(
+            mouse_position,
+            {
+                easel_dest.x - easel_origin.x,
+                easel_dest.y - easel_origin.y,
+                easel_dest.width,
+                easel_dest.height,
+            }
+        )
 
 
-        if !easel_unlocked {
+
+        if easel_unlocked {
+
+            if hovering_easel && raylib.IsMouseButtonPressed(.LEFT) {
+                mode = .Drawing
+            }
+
+        } else {
 
 
 
             // Hovering lockpad.
-
-            hovering_easel := raylib.CheckCollisionPointRec(
-                mouse_position,
-                {
-                    easel_dest.x - easel_origin.x,
-                    easel_dest.y - easel_origin.y,
-                    easel_dest.width,
-                    easel_dest.height,
-                }
-            )
 
             if hovering_easel {
                 control_animation(&easel_lockpad_hover_animation, .Increase)
