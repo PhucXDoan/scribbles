@@ -163,22 +163,21 @@ main :: proc() {
     //
 
     Global_Asset_Texture_Handle :: enum u32 {
-        nil           = 0,
-        Submit_Button = 1,
-        Rolypoly      = 2,
-        Cursor        = 3,
-        Easel         = 4,
-        Padlock       = 5,
+        nil,
+        Submit_Button,
+        Rolypoly,
+        Easel,
+        Padlock,
     }
 
     Global_Asset_Sound_Handle :: enum u32 {
-        nil              = 0,
-        Xylo             = 1,
-        Padlock          = 2,
-        Padlock_Locked   = 3,
-        Padlock_Unlocked = 4,
-        Easel_Open       = 5,
-        Easel_Close      = 6,
+        nil,
+        Xylo,
+        Padlock,
+        Padlock_Locked,
+        Padlock_Unlocked,
+        Easel_Open,
+        Easel_Close,
     }
 
     Global_Asset_Font_Handle :: enum u32 {
@@ -605,10 +604,10 @@ main :: proc() {
         //
 
         rolypoly_dest := raylib.Rectangle {
-            0.0,
-            0.0,
-            cast(f32) global_asset_textures[.Rolypoly].width,
-            cast(f32) global_asset_textures[.Rolypoly].height,
+            0,
+            0,
+            200,
+            150,
         }
 
         if rolypoly_animation.running {
@@ -739,12 +738,6 @@ main :: proc() {
 
             update_animation(&easel_lockpad_click_animation)
 
-        }
-
-        if mode == .Easel {
-            raylib.HideCursor()
-        } else {
-            raylib.ShowCursor()
         }
 
 
@@ -1102,31 +1095,6 @@ main :: proc() {
             }
 
 
-
-            ////////////////////////////////////////////////////////////////////////////////
-            //
-            // Render cursor.
-            //
-
-            if mode == .Easel {
-
-                cursor_dest := raylib.Rectangle {
-                    mouse_position.x + 4.0,
-                    mouse_position.y + 10.0,
-                    cast(f32) global_asset_textures[.Cursor].width,
-                    cast(f32) global_asset_textures[.Cursor].height
-                }
-
-                raylib.DrawTexturePro(
-                    texture  = global_asset_textures[.Cursor],
-                    source   = { 0.0, 0.0, cast(f32) global_asset_textures[.Cursor].width, cast(f32) global_asset_textures[.Cursor].height },
-                    dest     = cursor_dest,
-                    origin   = { cursor_dest.width / 2.0, cursor_dest.height / 2.0 },
-                    rotation = 150.0 if raylib.IsMouseButtonDown(.LEFT) else 160.0,
-                    tint     = raylib.WHITE,
-                )
-
-            }
 
         }
 
