@@ -357,9 +357,9 @@ main :: proc() {
     // Load global assets.
     //
 
-    global_asset_textures : [Global_Asset_Texture_Handle]raylib.Texture
-    global_asset_sounds   : [Global_Asset_Sound_Handle  ]raylib.Sound
-    global_asset_fonts    : [Global_Asset_Font_Handle   ]raylib.Font
+    @(static) global_asset_textures : [Global_Asset_Texture_Handle]raylib.Texture
+    @(static) global_asset_sounds   : [Global_Asset_Sound_Handle  ]raylib.Sound
+    @(static) global_asset_fonts    : [Global_Asset_Font_Handle   ]raylib.Font
 
     {
 
@@ -591,6 +591,216 @@ main :: proc() {
 
 
 
+
+    Button :: struct {
+        center           : raylib.Vector2,
+        style            : Button_Style,
+        mouse_hover_tint : raylib.Color,
+        mouse_hovering   : bool,
+        mouse_pressed    : bool,
+        hidden           : bool,
+    }
+
+    Button_Style :: union {
+        Button_Style_Lame,
+        Button_Style_Texture,
+    }
+
+    Button_Style_Lame :: struct {
+        text        : cstring,
+        font_handle : Global_Asset_Font_Handle,
+        font_size   : f32,
+    }
+
+    Button_Style_Texture :: struct {
+        dimensions     : raylib.Vector2,
+        texture_handle : Global_Asset_Texture_Handle,
+    }
+
+
+
+    BUTTON_STYLE_LAME_ROUNDNESS :: 0.2
+    BUTTON_STYLE_LAME_OUTLINE   :: 4
+    BUTTON_STYLE_LAME_PADDING   :: 4
+
+    update_button :: proc(button : ^Button) {
+
+        if button.hidden {
+
+            button.mouse_hovering = false
+
+        } else {
+
+            dest : raylib.Rectangle
+
+            switch style in button.style {
+
+                case Button_Style_Lame: {
+
+                    measurement := raylib.MeasureTextEx(
+                        font     = global_asset_fonts[style.font_handle],
+                        text     = style.text,
+                        fontSize = style.font_size,
+                        spacing  = 0,
+                    )
+
+                    dest = raylib.Rectangle {
+                        button.center.x - measurement.x / 2 - BUTTON_STYLE_LAME_PADDING,
+                        button.center.y - measurement.y / 2 - BUTTON_STYLE_LAME_PADDING,
+                        measurement.x + BUTTON_STYLE_LAME_PADDING * 2,
+                        measurement.y + BUTTON_STYLE_LAME_PADDING * 2,
+                    }
+
+                }
+
+                case Button_Style_Texture: {
+                    dest = {
+                        button.center.x - style.dimensions.x / 2,
+                        button.center.y - style.dimensions.y / 2,
+                        style.dimensions.x,
+                        style.dimensions.y,
+                    }
+                }
+
+                case: panic("Invalid.")
+
+            }
+
+            button.mouse_hovering = raylib.CheckCollisionPointRec(
+                raylib.GetMousePosition(),
+                dest,
+            )
+
+        }
+
+        button.mouse_pressed = button.mouse_hovering && raylib.IsMouseButtonPressed(.LEFT)
+
+    }
+
+    render_button :: proc(button : Button) {
+
+        if !button.hidden {
+
+            dest : raylib.Rectangle
+
+            switch style in button.style {
+
+                case Button_Style_Lame: {
+
+                    measurement := raylib.MeasureTextEx(
+                        font     = global_asset_fonts[style.font_handle],
+                        text     = style.text,
+                        fontSize = style.font_size,
+                        spacing  = 0,
+                    )
+
+                    rec := raylib.Rectangle {
+                        button.center.x - measurement.x / 2 - BUTTON_STYLE_LAME_PADDING,
+                        button.center.y - measurement.y / 2 - BUTTON_STYLE_LAME_PADDING,
+                        measurement.x + BUTTON_STYLE_LAME_PADDING * 2,
+                        measurement.y + BUTTON_STYLE_LAME_PADDING * 2,
+                    }
+
+                    raylib.DrawRectangleRoundedLinesEx(
+                        rec       = rec,
+                        roundness = BUTTON_STYLE_LAME_ROUNDNESS,
+                        segments  = 0,
+                        lineThick = BUTTON_STYLE_LAME_OUTLINE,
+                        color     = raylib.BLACK,
+                    )
+
+                    raylib.DrawRectangleRounded(
+                        rec       = rec,
+                        roundness = BUTTON_STYLE_LAME_ROUNDNESS,
+                        segments  = 0,
+                        color     = button.mouse_hover_tint if button.mouse_hovering else raylib.LIGHTGRAY,
+                    )
+
+                    raylib.DrawTextEx(
+                        font     = global_asset_fonts[style.font_handle],
+                        text     = style.text,
+                        position = {
+                            button.center.x - measurement.x / 2,
+                            button.center.y - measurement.y / 2,
+                        },
+                        fontSize = style.font_size,
+                        spacing  = 0,
+                        tint     = raylib.BLACK,
+                    )
+
+                }
+
+                case Button_Style_Texture: {
+
+                    raylib.DrawTexturePro(
+                        texture = global_asset_textures[style.texture_handle],
+                        source  = {
+                            0,
+                            0,
+                            f32(global_asset_textures[style.texture_handle].width ),
+                            f32(global_asset_textures[style.texture_handle].height),
+                        },
+                        dest = {
+                            button.center.x,
+                            button.center.y,
+                            style.dimensions.x,
+                            style.dimensions.y,
+                        },
+                        origin = {
+                            style.dimensions.x / 2,
+                            style.dimensions.y / 2,
+                        },
+                        rotation = 0,
+                        tint     = button.mouse_hover_tint if button.mouse_hovering else raylib.WHITE,
+                    )
+
+                }
+
+                case: panic("Invalid.")
+
+            }
+
+        }
+
+    }
+
+
+
+    easel_canvas_back_button := Button {
+
+        center = {
+            f32(raylib.GetScreenWidth() ) * 0.45,
+            f32(raylib.GetScreenHeight()) * 0.85,
+        },
+
+        style = Button_Style_Lame {
+            text        = "Back",
+            font_handle = .Sniglet,
+            font_size   = 30,
+        },
+
+        mouse_hover_tint = raylib.GREEN,
+
+    }
+
+    easel_canvas_submit_button := Button {
+
+        center = {
+            f32(raylib.GetScreenWidth() ) * 0.55,
+            f32(raylib.GetScreenHeight()) * 0.85,
+        },
+
+        style = Button_Style_Texture {
+            dimensions     = { 100, 50 },
+            texture_handle = .Submit_Button,
+        },
+
+        mouse_hover_tint = raylib.GREEN,
+
+    }
+
+
+
     for {
 
         if raylib.WindowShouldClose() {
@@ -780,31 +990,9 @@ main :: proc() {
             0 <= hovered_easel_canvas_cell_coordinate_y && hovered_easel_canvas_cell_coordinate_y < cast(int) easel_canvas_image.height
         )
 
-        submit_button_dest := raylib.Rectangle {
-            f32(raylib.GetScreenWidth() ) * 0.5,
-            f32(raylib.GetScreenHeight()) * 0.85,
-            100.0,
-            50.0,
-        }
 
-        submit_button_origin := raylib.Vector2 {
-            submit_button_dest.width  / 2,
-            submit_button_dest.height / 2,
-        }
-
-        hovering_submit_button := false
 
         if mode == .Easel {
-
-            hovering_submit_button = raylib.CheckCollisionPointRec(
-                mouse_position,
-                {
-                    submit_button_dest.x - submit_button_origin.x,
-                    submit_button_dest.y - submit_button_origin.y,
-                    submit_button_dest.width,
-                    submit_button_dest.height,
-                }
-            )
 
             if raylib.IsMouseButtonPressed(.LEFT) && hovered_easel_canvas_cell_is_within {
 
@@ -817,22 +1005,37 @@ main :: proc() {
 
             }
 
-            if hovering_submit_button && raylib.IsMouseButtonPressed(.LEFT) {
+            raylib.UpdateTexture(easel_canvas_texture, easel_canvas_image.data)
 
-                if friend_texture != nil {
-                    raylib.UnloadTexture(friend_texture.?)
-                }
+        }
 
-                friend_texture = raylib.LoadTextureFromImage(easel_canvas_image)
 
-                raylib.ImageClearBackground(&easel_canvas_image, EASEL_DEFAULT_COLOR)
 
-                mode = .Normal
-                raylib.PlaySound(global_asset_sounds[.Easel_Close])
+        easel_canvas_back_button.hidden = mode != .Easel
+        update_button(&easel_canvas_back_button)
 
+        if easel_canvas_back_button.mouse_pressed || raylib.IsKeyPressed(.ESCAPE) {
+            mode = .Normal
+            raylib.PlaySound(global_asset_sounds[.Easel_Close])
+        }
+
+
+
+        easel_canvas_submit_button.hidden = mode != .Easel
+        update_button(&easel_canvas_submit_button)
+
+        if easel_canvas_submit_button.mouse_pressed {
+
+            if friend_texture != nil {
+                raylib.UnloadTexture(friend_texture.?)
             }
 
-            raylib.UpdateTexture(easel_canvas_texture, easel_canvas_image.data)
+            friend_texture = raylib.LoadTextureFromImage(easel_canvas_image)
+
+            raylib.ImageClearBackground(&easel_canvas_image, EASEL_DEFAULT_COLOR)
+
+            mode = .Normal
+            raylib.PlaySound(global_asset_sounds[.Easel_Close])
 
         }
 
@@ -1092,16 +1295,10 @@ main :: proc() {
 
                 }
 
-                raylib.DrawTexturePro(
-                    texture  = global_asset_textures[.Submit_Button],
-                    source   = { 0.0, 0.0, f32(global_asset_textures[.Submit_Button].width), f32(global_asset_textures[.Submit_Button].height) },
-                    dest     = submit_button_dest,
-                    origin   = submit_button_origin,
-                    rotation = 0.0,
-                    tint     = raylib.GREEN if hovering_submit_button else raylib.WHITE,
-                )
-
             }
+
+            render_button(easel_canvas_back_button)
+            render_button(easel_canvas_submit_button)
 
 
 
