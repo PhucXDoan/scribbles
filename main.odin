@@ -461,16 +461,25 @@ main :: proc() {
     // Load local save-file.
     //
 
+    EASEL_COST          :: 100
+    EASEL_DEFAULT_COLOR :: raylib.Color { 234, 240, 243, 255 }
+
     SAVE_FILE_PATH :: "./scribbles.save"
 
     #assert(size_of(Save_File_Header) == 32)
     Save_File_Header :: union #no_nil {
         [31]u8,
-        Game_State_Prefix,
+        Save_File_Header_Game_State,
+        Save_File_Header_Easel_Canvas_Image,
     }
 
-    Game_State_Prefix :: struct #packed {
+    Save_File_Header_Game_State :: struct #packed {
         version : u8,
+    }
+
+    Save_File_Header_Easel_Canvas_Image :: struct #packed {
+        version : u8,
+        length  : u32,
     }
 
     #assert(size_of(Game_State) == 256)
@@ -486,14 +495,15 @@ main :: proc() {
 
 
 
-    game_state : Game_State_V1
+    game_state         : Game_State_V1
+    easel_canvas_image : raylib.Image
 
     {
 
         remaining_save_file_data, save_file_reading_error := os.read_entire_file(SAVE_FILE_PATH, context.temp_allocator)
 
         if save_file_reading_error != nil {
-            save_game(game_state)
+            save_game(game_state, {})
             remaining_save_file_data = os.read_entire_file(SAVE_FILE_PATH, context.temp_allocator) or_else panic("Failed.")
         }
 
@@ -507,7 +517,9 @@ main :: proc() {
 
                 // Load game state.
 
-                case Game_State_Prefix: {
+                case Save_File_Header_Game_State: {
+
+                    assert(header.version <= 1)
 
                     save_game_state := eat(&remaining_save_file_data, Game_State)
 
@@ -527,6 +539,20 @@ main :: proc() {
 
 
 
+                // Load easel canvas image.
+
+                case Save_File_Header_Easel_Canvas_Image: {
+
+                    assert(header.version <= 1)
+
+                    image_data := eat(&remaining_save_file_data, int(header.length))
+
+                    easel_canvas_image = raylib.LoadImageFromMemory(".png", raw_data(image_data), i32(len(image_data)))
+
+                }
+
+
+
                 case [31]u8 : panic("Invalid.")
                 case        : panic("Invalid.")
 
@@ -534,9 +560,13 @@ main :: proc() {
 
         }
 
+        if easel_canvas_image == {} {
+            easel_canvas_image = raylib.GenImageColor(8, 8, EASEL_DEFAULT_COLOR)
+        }
+
     }
 
-    save_game :: proc(game_state : Game_State) {
+    save_game :: proc(game_state : Game_State, easel_canvas_image : raylib.Image) {
 
         fmt.printf("Saving to '{}'...\n", SAVE_FILE_PATH)
 
@@ -547,50 +577,47 @@ main :: proc() {
 
         // Save game state.
 
-        save_file_header : Save_File_Header = Game_State_Prefix {
-            version = 1,
+        {
+
+            save_file_header : Save_File_Header = Save_File_Header_Game_State {
+                version = 1,
+            }
+
+            save_game_state : Game_State = game_state
+
+            _ = os.write(save_file_handle, mem.any_to_bytes(save_file_header)) or_else panic("Failed.")
+            _ = os.write(save_file_handle, mem.any_to_bytes(save_game_state )) or_else panic("Failed.")
+
         }
 
-        save_game_state : Game_State = game_state
-
-        _ = os.write(save_file_handle, mem.any_to_bytes(save_file_header)) or_else panic("Failed.")
-        _ = os.write(save_file_handle, mem.any_to_bytes(save_game_state )) or_else panic("Failed.")
 
 
+        // Save easel canvas image.
+
+        if easel_canvas_image != {} {
+
+            image_length : i32
+            image_data   := raylib.ExportImageToMemory(easel_canvas_image, ".png", &image_length)
+            defer raylib.MemFree(image_data)
+
+            save_file_header : Save_File_Header = Save_File_Header_Easel_Canvas_Image {
+                version = 1,
+                length  = u32(image_length),
+            }
+
+            _ = os.write    (save_file_handle, mem.any_to_bytes(save_file_header)) or_else panic("Failed.")
+            _ = os.write_ptr(save_file_handle, image_data, int(image_length)     ) or_else panic("Failed.")
+
+        }
 
     }
-
-    save_game(game_state)
 
 
 
     ////////////////////////////////////////////////////////////////////////////////
     //
-    // Main loop.
+    // Buttons.
     //
-
-    EASEL_COST          :: 100
-    EASEL_DEFAULT_COLOR :: raylib.Color { 234, 240, 243, 255 }
-
-    Mode :: enum {
-        Normal,
-        Easel,
-    }
-
-    mode                          := Mode.Normal
-    time_since_last_click         := cast(f32) 0.0
-    friend_animation              := Animation { duration = 1 }
-    friend_x                      := cast(f32) 100.0
-    rolypoly_animation            := Animation { duration = 0.25 }
-    easel_hover_animation         := Animation { duration = 0.20 }
-    easel_lockpad_click_animation := Animation { duration = 0.10 }
-
-    easel_canvas_image   := raylib.GenImageColor(8, 8, EASEL_DEFAULT_COLOR)
-    easel_canvas_texture := raylib.LoadTextureFromImage(easel_canvas_image)
-    friend_texture       :  Maybe(raylib.Texture)
-
-
-
 
     Button :: struct {
         center           : raylib.Vector2,
@@ -766,6 +793,32 @@ main :: proc() {
 
 
 
+    ////////////////////////////////////////////////////////////////////////////////
+    //
+    // Main loop.
+    //
+
+    Mode :: enum {
+        Normal,
+        Easel,
+    }
+
+    mode                          := Mode.Normal
+    time_since_last_click         := cast(f32) 0.0
+    friend_animation              := Animation { duration = 1 }
+    friend_x                      := cast(f32) 100.0
+    rolypoly_animation            := Animation { duration = 0.25 }
+    easel_hover_animation         := Animation { duration = 0.20 }
+    easel_lockpad_click_animation := Animation { duration = 0.10 }
+
+
+
+    easel_canvas_texture := raylib.LoadTextureFromImage(easel_canvas_image)
+    friend_texture       :  Maybe(raylib.Texture)
+
+
+
+
     easel_canvas_back_button := Button {
 
         center = {
@@ -801,10 +854,12 @@ main :: proc() {
 
 
 
+    save_game(game_state, easel_canvas_image)
+
     for {
 
         if raylib.WindowShouldClose() {
-            save_game(game_state)
+            save_game(game_state, easel_canvas_image)
             break
         }
 
@@ -1014,7 +1069,7 @@ main :: proc() {
         easel_canvas_back_button.hidden = mode != .Easel
         update_button(&easel_canvas_back_button)
 
-        if easel_canvas_back_button.mouse_pressed || raylib.IsKeyPressed(.ESCAPE) {
+        if easel_canvas_back_button.mouse_pressed || (mode == .Easel && raylib.IsKeyPressed(.ESCAPE)) {
             mode = .Normal
             raylib.PlaySound(global_asset_sounds[.Easel_Close])
         }
