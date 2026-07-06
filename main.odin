@@ -56,6 +56,12 @@ main :: proc() {
     padlock_sound := raylib.LoadSound("./media/padlock.wav")
     defer raylib.UnloadSound(padlock_sound)
 
+    padlock_locked_sound := raylib.LoadSound("./media/padlock_locked.wav")
+    defer raylib.UnloadSound(padlock_locked_sound)
+
+    padlock_unlocked_sound := raylib.LoadSound("./media/padlock_unlocked.wav")
+    defer raylib.UnloadSound(padlock_unlocked_sound)
+
     rolypoly_texture := raylib.LoadTextureFromImage(rolypoly_image)
     defer raylib.UnloadTexture(rolypoly_texture)
 
@@ -180,55 +186,6 @@ main :: proc() {
 
 
     ////////////////////////////////////////////////////////////////////////////////
-    //
-    // Screen Buttons.
-    //
-
-    SCREEN_BUTTON_FONT_SIZE :: 30
-
-    Screen_Option :: enum {
-        Roly,
-        Draw,
-        Shop,
-    }
-
-    Screen_Button :: struct {
-        text            : cstring,
-        text_width      : f32,
-        text_height     : f32,
-        center_x        : f32,
-        center_y        : f32,
-        base_box_width  : f32,
-        base_box_height : f32,
-        hover_t         : f32,
-    }
-
-    screen_buttons : [Screen_Option]Screen_Button
-
-    for &screen_button, screen_button_i in screen_buttons {
-
-        screen_button.text = strings.clone_to_cstring(reflect.enum_name_from_value(Screen_Option(screen_button_i)) or_else panic("Invalid."))
-
-        measurement := raylib.MeasureTextEx(raylib.GetFontDefault(), screen_button.text, SCREEN_BUTTON_FONT_SIZE, SCREEN_BUTTON_FONT_SIZE / f32(raylib.GetFontDefault().baseSize))
-
-        screen_button.text_width      = measurement.x
-        screen_button.text_height     = measurement.y
-        screen_button.center_x        = (f32(screen_button_i) + 1) * f32(raylib.GetScreenWidth()) / (f32(len(Screen_Option)) + 1)
-        screen_button.center_y        = f32(raylib.GetScreenHeight()) - 35
-        screen_button.base_box_width  = measurement.x * 1.5
-        screen_button.base_box_height = measurement.y * 1.5
-
-    }
-
-    defer {
-        for screen_button in screen_buttons {
-            defer delete(screen_button.text)
-        }
-    }
-
-
-
-    ////////////////////////////////////////////////////////////////////////////////
 
 
 
@@ -247,8 +204,12 @@ main :: proc() {
     friend_x              := cast(f32) 100.0
     pets                  := 0
 
-    rolypoly_animation    := Animation { duration = 0.25 }
-    easel_hover_animation := Animation { duration = 0.2 }
+    rolypoly_animation := Animation { duration = 0.25 }
+
+    easel_unlocked                := false
+    easel_cost                    := 10
+    easel_lockpad_hover_animation := Animation { duration = 0.20 }
+    easel_lockpad_click_animation := Animation { duration = 0.10 }
 
     for !raylib.WindowShouldClose() {
 
@@ -327,59 +288,6 @@ main :: proc() {
 
         ////////////////////////////////////////
         //
-        // Update screen buttons.
-        //
-
-        for &screen_button, screen_button_i in screen_buttons {
-
-            hovering_screen_button := raylib.CheckCollisionPointRec(
-                mouse_position,
-                {
-                    screen_button.center_x - screen_button.base_box_width  / 2,
-                    screen_button.center_y - screen_button.base_box_height / 2,
-                    screen_button.base_box_width,
-                    screen_button.base_box_height,
-                }
-            )
-
-            if hovering_screen_button {
-                screen_button.hover_t += raylib.GetFrameTime() / 0.1
-            } else {
-                screen_button.hover_t -= raylib.GetFrameTime() / 0.1
-            }
-
-            screen_button.hover_t = clamp(screen_button.hover_t, 0, 1)
-
-            if hovering_screen_button && raylib.IsMouseButtonPressed(.LEFT) {
-
-                screen_button.hover_t = 0
-
-                switch screen_button_i {
-
-                    case .Roly: {
-                        mode = .Main
-                    }
-
-                    case .Draw: {
-                        mode = .Drawing
-                    }
-
-                    case .Shop: {
-                        fmt.printf("TODO\n")
-                    }
-
-                    case: panic("Invalid")
-
-                }
-
-            }
-
-        }
-
-
-
-        ////////////////////////////////////////
-        //
         // Update easel.
         //
 
@@ -395,33 +303,65 @@ main :: proc() {
             easel_dest.height,
         }
 
-        hovering_easel := raylib.CheckCollisionPointRec(
-            mouse_position,
-            {
-                easel_dest.x - easel_origin.x,
-                easel_dest.y - easel_origin.y,
-                easel_dest.width,
-                easel_dest.height,
+
+
+        if !easel_unlocked {
+
+
+
+            // Hovering lockpad.
+
+            hovering_easel := raylib.CheckCollisionPointRec(
+                mouse_position,
+                {
+                    easel_dest.x - easel_origin.x,
+                    easel_dest.y - easel_origin.y,
+                    easel_dest.width,
+                    easel_dest.height,
+                }
+            )
+
+            if hovering_easel {
+                control_animation(&easel_lockpad_hover_animation, .Increase)
+            } else {
+                control_animation(&easel_lockpad_hover_animation, .Decrease)
             }
-        )
 
-        if hovering_easel {
-            control_animation(&easel_hover_animation, .Increase)
+            old_easel_lockpad_hover_animation_value := easel_lockpad_hover_animation.value
 
-        } else {
-            control_animation(&easel_hover_animation, .Decrease)
-        }
+            update_animation(&easel_lockpad_hover_animation)
 
-        old_easel_hover_animation_value := easel_hover_animation.value
+            if (
+                old_easel_lockpad_hover_animation_value <  0.5 &&
+                easel_lockpad_hover_animation.value     >= 0.5 &&
+                !raylib.IsSoundPlaying(padlock_sound)
+            ) {
+                raylib.PlaySound(padlock_sound)
+            }
 
-        update_animation(&easel_hover_animation)
 
-        if (
-            old_easel_hover_animation_value <  0.5 &&
-            easel_hover_animation.value     >= 0.5 &&
-            !raylib.IsSoundPlaying(padlock_sound)
-        ) {
-            raylib.PlaySound(padlock_sound)
+
+            // Clicking lockpad.
+
+            if easel_lockpad_hover_animation.value == 1 && raylib.IsMouseButtonPressed(.LEFT) {
+
+                if pets < easel_cost {
+
+                    control_animation(&easel_lockpad_click_animation, .Restart)
+                    raylib.PlaySound(padlock_locked_sound)
+
+                } else {
+
+                    pets           -= easel_cost
+                    easel_unlocked  = true
+                    raylib.PlaySound(padlock_unlocked_sound)
+
+                }
+
+            }
+
+            update_animation(&easel_lockpad_click_animation)
+
         }
 
 
@@ -657,130 +597,102 @@ main :: proc() {
                 dest     = easel_dest,
                 origin   = easel_origin,
                 rotation = 0,
-                tint     = raylib.GRAY,
+                tint     = raylib.WHITE if easel_unlocked else raylib.GRAY,
             )
 
-            easel_padlock_dest := raylib.Rectangle {
-                easel_dest.x,
-                easel_dest.y - easel_dest.height / 2,
-                ease_animation(75, 100, easel_hover_animation, .Bounce_Out),
-                ease_animation(75, 100, easel_hover_animation, .Bounce_Out),
-            }
+            if !easel_unlocked {
 
-            raylib.DrawTexturePro(
-                texture  = padlock_texture,
-                source   = { 0, 0, cast(f32) padlock_texture.width, cast(f32) padlock_texture.height },
-                dest     = easel_padlock_dest,
-                origin   = { f32(easel_padlock_dest.width) / 2, f32(easel_padlock_dest.height) / 2 },
-                rotation = math.sin(ease_animation(0, 6, easel_hover_animation, .Cubic_Out)) * 10,
-                tint     = raylib.WHITE,
-            )
-
-            if easel_hover_animation.value == 1 {
-
-                x       := f32(rolypoly_dest.x + rolypoly_dest.width  * 0.75)
-                y       := f32(rolypoly_dest.y + rolypoly_dest.height * 0.10)
-                message := cstring("I need 100 pets...")
-
-                BUBBLE_DIALOG_FONT_SIZE :: 20
-                BUBBLE_DIALOG_PADDING   :: 15
-                BUBBLE_DIALOG_ROUNDNESS :: 0.3
-                BUBBLE_DIALOG_OUTLINE   :: 4
-
-                text_width  := f32(raylib.MeasureText(message, BUBBLE_DIALOG_FONT_SIZE))
-                text_height := f32(BUBBLE_DIALOG_FONT_SIZE)
-
-                bubble_rectangle := raylib.Rectangle {
-                    x      = x - BUBBLE_DIALOG_PADDING / 2,
-                    y      = y - BUBBLE_DIALOG_PADDING * 3 - text_height,
-                    width  = text_width  + BUBBLE_DIALOG_PADDING * 2,
-                    height = text_height + BUBBLE_DIALOG_PADDING * 2,
+                easel_padlock_dest := raylib.Rectangle {
+                    easel_dest.x,
+                    easel_dest.y - easel_dest.height / 2,
+                    ease_animation(75, 100, easel_lockpad_hover_animation, .Bounce_Out),
+                    ease_animation(75, 100, easel_lockpad_hover_animation, .Bounce_Out),
                 }
 
-                vertices := [?][2]f32 {
-                    { x, bubble_rectangle.y + bubble_rectangle.height },
-                    { x, y },
-                    { x + (x - bubble_rectangle.x) * 2, bubble_rectangle.y + bubble_rectangle.height },
+                easel_padlock_rotation := math.sin(ease_animation(0, 6, easel_lockpad_hover_animation, .Cubic_Out)) * 10
+                easel_padlock_rotation += math.sin(ease_animation(0, 6, easel_lockpad_click_animation, .Cubic_Out)) * 10
+
+                raylib.DrawTexturePro(
+                    texture  = padlock_texture,
+                    source   = { 0, 0, cast(f32) padlock_texture.width, cast(f32) padlock_texture.height },
+                    dest     = easel_padlock_dest,
+                    origin   = { f32(easel_padlock_dest.width) / 2, f32(easel_padlock_dest.height) / 2 },
+                    rotation = easel_padlock_rotation,
+                    tint     = raylib.WHITE,
+                )
+
+                if easel_lockpad_hover_animation.value == 1 {
+
+                    x       := f32(rolypoly_dest.x + rolypoly_dest.width  * 0.75)
+                    y       := f32(rolypoly_dest.y + rolypoly_dest.height * 0.10)
+                    message := fmt.ctprintf("I need {} pets...", easel_cost)
+
+                    BUBBLE_DIALOG_FONT_SIZE :: 20
+                    BUBBLE_DIALOG_PADDING   :: 15
+                    BUBBLE_DIALOG_ROUNDNESS :: 0.3
+                    BUBBLE_DIALOG_OUTLINE   :: 4
+
+                    text_width  := f32(raylib.MeasureText(message, BUBBLE_DIALOG_FONT_SIZE))
+                    text_height := f32(BUBBLE_DIALOG_FONT_SIZE)
+
+                    bubble_rectangle := raylib.Rectangle {
+                        x      = x - BUBBLE_DIALOG_PADDING / 2,
+                        y      = y - BUBBLE_DIALOG_PADDING * 3 - text_height,
+                        width  = text_width  + BUBBLE_DIALOG_PADDING * 2,
+                        height = text_height + BUBBLE_DIALOG_PADDING * 2,
+                    }
+
+                    vertices := [?][2]f32 {
+                        { x, bubble_rectangle.y + bubble_rectangle.height },
+                        { x, y },
+                        { x + (x - bubble_rectangle.x) * 2, bubble_rectangle.y + bubble_rectangle.height },
+                    }
+
+                    raylib.DrawRectangleRoundedLinesEx(
+                        rec       = bubble_rectangle,
+                        roundness = BUBBLE_DIALOG_ROUNDNESS,
+                        segments  = 0,
+                        lineThick = BUBBLE_DIALOG_OUTLINE,
+                        color     = raylib.BLACK,
+                    )
+
+                    raylib.DrawTriangle(
+                        v1       = vertices[0],
+                        v2       = vertices[1],
+                        v3       = vertices[2],
+                        color    = raylib.LIGHTGRAY,
+                    )
+
+                    raylib.DrawLineEx(
+                        startPos = vertices[0],
+                        endPos   = vertices[1],
+                        thick    = BUBBLE_DIALOG_OUTLINE,
+                        color    = raylib.BLACK,
+                    )
+
+                    raylib.DrawLineEx(
+                        startPos = vertices[1],
+                        endPos   = vertices[2],
+                        thick    = BUBBLE_DIALOG_OUTLINE,
+                        color    = raylib.BLACK,
+                    )
+
+                    raylib.DrawRectangleRounded(
+                        rec       = bubble_rectangle,
+                        roundness = BUBBLE_DIALOG_ROUNDNESS,
+                        segments  = 0,
+                        color     = raylib.LIGHTGRAY,
+                    )
+
+                    raylib.DrawText(
+                        message,
+                        i32(bubble_rectangle.x + BUBBLE_DIALOG_PADDING),
+                        i32(bubble_rectangle.y + BUBBLE_DIALOG_PADDING),
+                        BUBBLE_DIALOG_FONT_SIZE,
+                        raylib.BLACK
+                    )
+
                 }
-
-                raylib.DrawRectangleRoundedLinesEx(
-                    rec       = bubble_rectangle,
-                    roundness = BUBBLE_DIALOG_ROUNDNESS,
-                    segments  = 0,
-                    lineThick = BUBBLE_DIALOG_OUTLINE,
-                    color     = raylib.BLACK,
-                )
-
-                raylib.DrawTriangle(
-                    v1       = vertices[0],
-                    v2       = vertices[1],
-                    v3       = vertices[2],
-                    color    = raylib.LIGHTGRAY,
-                )
-
-                raylib.DrawLineEx(
-                    startPos = vertices[0],
-                    endPos   = vertices[1],
-                    thick    = BUBBLE_DIALOG_OUTLINE,
-                    color    = raylib.BLACK,
-                )
-
-                raylib.DrawLineEx(
-                    startPos = vertices[1],
-                    endPos   = vertices[2],
-                    thick    = BUBBLE_DIALOG_OUTLINE,
-                    color    = raylib.BLACK,
-                )
-
-                raylib.DrawRectangleRounded(
-                    rec       = bubble_rectangle,
-                    roundness = BUBBLE_DIALOG_ROUNDNESS,
-                    segments  = 0,
-                    color     = raylib.LIGHTGRAY,
-                )
-
-                raylib.DrawText(
-                    message,
-                    i32(bubble_rectangle.x + BUBBLE_DIALOG_PADDING),
-                    i32(bubble_rectangle.y + BUBBLE_DIALOG_PADDING),
-                    BUBBLE_DIALOG_FONT_SIZE,
-                    raylib.BLACK
-                )
-
-            }
-
-
-
-            ////////////////////////////////////////
-            //
-            // Render screen buttons.
-            //
-
-            for screen_button in screen_buttons {
-
-                animation_scale   := math.lerp(f32(1), 1.1, ease.cubic_in_out(screen_button.hover_t))
-                actual_box_width  := screen_button.base_box_width  * animation_scale
-                actual_box_height := screen_button.base_box_height * animation_scale
-
-                raylib.DrawRectanglePro(
-                    rec = {
-                        screen_button.center_x,
-                        screen_button.center_y,
-                        actual_box_width,
-                        actual_box_height,
-                    },
-                    origin   = { actual_box_width / 2, actual_box_height / 2 },
-                    rotation = math.lerp(f32(0), -2, ease.cubic_in_out(screen_button.hover_t)),
-                    color    = rgba_lerp(raylib.BLACK, raylib.YELLOW, screen_button.hover_t),
-                )
-
-                raylib.DrawText(
-                    screen_button.text,
-                    i32(screen_button.center_x - screen_button.text_width  / 2),
-                    i32(screen_button.center_y - screen_button.text_height / 2),
-                    SCREEN_BUTTON_FONT_SIZE,
-                    rgba_lerp(raylib.WHITE, raylib.BLACK, screen_button.hover_t),
-                )
 
             }
 
