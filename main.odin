@@ -5,6 +5,8 @@ import "core:strings"
 import "core:math"
 import "core:math/ease"
 import "core:reflect"
+import "core:os"
+import "core:mem"
 import "vendor:raylib"
 
 
@@ -121,7 +123,181 @@ main :: proc() {
 
 
 
+    ////////////////////////////////////////////////////////////////////////////////
+    //
+    // Pack global assets.
+    //
+
+    Global_Asset_Texture_Handle :: enum u32 {
+        nil           = 0,
+        Submit_Button = 1,
+        Rolypoly      = 2,
+        Cursor        = 3,
+        Easel         = 4,
+        Padlock       = 5,
+    }
+
+    Global_Asset_Sound_Handle :: enum u32 {
+        nil              = 0,
+        Xylo             = 1,
+        Padlock          = 2,
+        Padlock_Locked   = 3,
+        Padlock_Unlocked = 4,
+        Easel_Open       = 5,
+        Easel_Close      = 6,
+    }
+
+    Global_Asset_Font_Handle :: enum u32 {
+        nil     = 0,
+        Sniglet = 1,
+    }
+
+    #assert(size_of(Global_Asset_Pack_Header) == 32)
+    Global_Asset_Pack_Header :: union {
+        Global_Asset_Pack_Texture_Header,
+        Global_Asset_Pack_Sound_Header,
+        Global_Asset_Pack_Font_Header,
+    }
+
+    Global_Asset_Pack_Texture_Header :: struct #packed {
+        handle       : Global_Asset_Texture_Handle,
+        image_length : u32,
+        _            : [23]u8,
+    }
+
+    Global_Asset_Pack_Sound_Header :: struct #packed {
+        handle       : Global_Asset_Sound_Handle,
+        sound_length : u32,
+        _            : [23]u8,
+    }
+
+    Global_Asset_Pack_Font_Header :: struct #packed {
+        handle      : Global_Asset_Font_Handle,
+        font_length : u32,
+        _           : [23]u8,
+    }
+
+    GLOBAL_ASSET_PACK_FILE_PATH :: "./media/Global_Asset_Pack.bin"
+
+    when ODIN_DEBUG {{
+
+
+
+        // Set up global asset pack file.
+
+        global_asset_pack_file_handle := os.open(GLOBAL_ASSET_PACK_FILE_PATH, os.O_CREATE | os.O_TRUNC | os.O_APPEND) or_else panic("Failed.")
+        defer os.close(global_asset_pack_file_handle)
+
+
+
+        // Pack textures.
+
+        for global_asset_texture_handle, global_asset_texture_handle_i in Global_Asset_Texture_Handle {
+
+            if global_asset_texture_handle != nil {
+
+                global_asset_texture_file_path := fmt.tprintf("./media/{}.png", reflect.enum_string(global_asset_texture_handle))
+
+                fmt.printf(
+                    "[{}/{}] Packing texture '{}' from file path '{}'...\n",
+                    global_asset_texture_handle_i,
+                    len(Global_Asset_Texture_Handle) - 1,
+                    global_asset_texture_handle,
+                    global_asset_texture_file_path,
+                )
+
+                global_asset_texture_file_data := os.read_entire_file(global_asset_texture_file_path, context.temp_allocator) or_else panic("Failed.")
+
+                global_asset_pack_texture_header : Global_Asset_Pack_Header = Global_Asset_Pack_Texture_Header {
+                    handle       = global_asset_texture_handle,
+                    image_length = u32(len(global_asset_texture_file_data)),
+                }
+
+                _ = os.write(global_asset_pack_file_handle, mem.any_to_bytes(global_asset_pack_texture_header)) or_else panic("Failed.")
+                _ = os.write(global_asset_pack_file_handle, global_asset_texture_file_data                    ) or_else panic("Failed.")
+
+            }
+
+        }
+
+        fmt.printf("\n")
+
+
+
+        // Pack sounds.
+
+        for global_asset_sound_handle, global_asset_sound_handle_i in Global_Asset_Sound_Handle {
+
+            if global_asset_sound_handle != nil {
+
+                global_asset_sound_file_path := fmt.tprintf("./media/{}.wav", reflect.enum_string(global_asset_sound_handle))
+
+                fmt.printf(
+                    "[{}/{}] Packing sound '{}' from file path '{}'...\n",
+                    global_asset_sound_handle_i,
+                    len(Global_Asset_Sound_Handle) - 1,
+                    global_asset_sound_handle,
+                    global_asset_sound_file_path,
+                )
+
+                global_asset_sound_file_data := os.read_entire_file(global_asset_sound_file_path, context.temp_allocator) or_else panic("Failed.")
+
+                global_asset_pack_sound_header : Global_Asset_Pack_Header = Global_Asset_Pack_Sound_Header {
+                    handle       = global_asset_sound_handle,
+                    sound_length = u32(len(global_asset_sound_file_data)),
+                }
+
+                _ = os.write(global_asset_pack_file_handle, mem.any_to_bytes(global_asset_pack_sound_header)) or_else panic("Failed.")
+                _ = os.write(global_asset_pack_file_handle, global_asset_sound_file_data                    ) or_else panic("Failed.")
+
+            }
+
+        }
+
+        fmt.printf("\n")
+
+
+
+        // Pack fonts.
+
+        for global_asset_font_handle, global_asset_font_handle_i in Global_Asset_Font_Handle {
+
+            if global_asset_font_handle != nil {
+
+                global_asset_font_file_path := fmt.tprintf("./media/{}.ttf", reflect.enum_string(global_asset_font_handle))
+
+                fmt.printf(
+                    "[{}/{}] Packing font '{}' from file path '{}'...\n",
+                    global_asset_font_handle_i,
+                    len(Global_Asset_Font_Handle) - 1,
+                    global_asset_font_handle,
+                    global_asset_font_file_path,
+                )
+
+                global_asset_font_file_data := os.read_entire_file(global_asset_font_file_path, context.temp_allocator) or_else panic("Failed.")
+
+                global_asset_pack_font_header : Global_Asset_Pack_Header = Global_Asset_Pack_Font_Header {
+                    handle      = global_asset_font_handle,
+                    font_length = u32(len(global_asset_font_file_data)),
+                }
+
+                _ = os.write(global_asset_pack_file_handle, mem.any_to_bytes(global_asset_pack_font_header)) or_else panic("Failed.")
+                _ = os.write(global_asset_pack_file_handle, global_asset_font_file_data                    ) or_else panic("Failed.")
+
+            }
+
+        }
+
+        fmt.printf("\n")
+
+    }}
+
+
+
+    ////////////////////////////////////////////////////////////////////////////////
+    //
     // Set up Raylib.
+    //
 
     raylib.SetTraceLogLevel(.WARNING)
     raylib.SetTargetFPS(60)
@@ -139,89 +315,173 @@ main :: proc() {
 
 
 
-    ////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////
     //
-    // Assets.
+    // Load global assets.
     //
 
-    Asset_Texture :: enum {
-        nil,
-        Submit_Button,
-        Rolypoly,
-        Cursor,
-        Easel,
-        Padlock,
-    }
+    global_asset_textures : [Global_Asset_Texture_Handle]raylib.Texture
+    global_asset_sounds   : [Global_Asset_Sound_Handle  ]raylib.Sound
+    global_asset_fonts    : [Global_Asset_Font_Handle   ]raylib.Font
 
-    Asset_Sound :: enum {
-        nil,
-        Xylo,
-        Padlock,
-        Padlock_Locked,
-        Padlock_Unlocked,
-        Easel_Open,
-        Easel_Close,
-    }
+    {
 
-    Asset_Font :: enum {
-        nil,
-        Sniglet,
-    }
+        when ODIN_DEBUG {
 
-    asset_textures := [Asset_Texture]raylib.Texture {}
+            // Load the local asset pack file.
+            remaining_global_asset_pack_data := os.read_entire_file(GLOBAL_ASSET_PACK_FILE_PATH, context.temp_allocator) or_else panic("Failed.")
 
-    for &asset_texture, asset_texture_i in asset_textures {
-        if asset_texture_i != nil {
-            asset_texture = raylib.LoadTexture(fmt.ctprintf("./media/{}.png", reflect.enum_string(asset_texture_i)))
+        } else {
+
+            // Bake the local asset pack file into the executable.
+            @(static)
+            remaining_global_asset_pack_data := #load(GLOBAL_ASSET_PACK_FILE_PATH)
+
         }
-    }
 
-    defer for asset_texture, asset_texture_i in asset_textures {
-        if asset_texture_i != nil {
-            raylib.UnloadTexture(asset_texture)
+        for {
+
+
+
+            // Done processing all of the data?
+
+            if len(remaining_global_asset_pack_data) == 0 {
+                break
+            }
+
+
+
+            // Get header.
+
+            global_asset_pack_header : ^Global_Asset_Pack_Header
+
+            assert(len(remaining_global_asset_pack_data) >= size_of(global_asset_pack_header^))
+
+            global_asset_pack_header         = transmute(^Global_Asset_Pack_Header) raw_data(remaining_global_asset_pack_data)
+            remaining_global_asset_pack_data = remaining_global_asset_pack_data[size_of(global_asset_pack_header^):]
+
+
+
+            // Handle header.
+
+            switch header in global_asset_pack_header {
+
+
+
+                // Textures.
+
+                case Global_Asset_Pack_Texture_Header: {
+
+
+
+                    // Get image data.
+
+                    image_data : []u8
+
+                    assert(u32(len(remaining_global_asset_pack_data)) >= header.image_length)
+
+                    image_data                       = remaining_global_asset_pack_data[:header.image_length ]
+                    remaining_global_asset_pack_data = remaining_global_asset_pack_data[ header.image_length:]
+
+
+
+                    // Load asset texture.
+
+                    global_asset_image := raylib.LoadImageFromMemory(".png", raw_data(image_data), i32(len(image_data)))
+                    defer raylib.UnloadImage(global_asset_image)
+
+                    assert(header.handle != nil)
+                    assert(int(header.handle) < len(global_asset_textures))
+                    assert(global_asset_textures[header.handle] == {})
+
+                    global_asset_textures[header.handle] = raylib.LoadTextureFromImage(global_asset_image)
+
+                }
+
+
+
+                // Sounds.
+
+                case Global_Asset_Pack_Sound_Header: {
+
+
+
+                    // Get sound data.
+
+                    sound_data : []u8
+
+                    assert(u32(len(remaining_global_asset_pack_data)) >= header.sound_length)
+
+                    sound_data                       = remaining_global_asset_pack_data[:header.sound_length ]
+                    remaining_global_asset_pack_data = remaining_global_asset_pack_data[ header.sound_length:]
+
+
+
+                    // Load asset sound.
+
+                    global_asset_wave := raylib.LoadWaveFromMemory(".wav", raw_data(sound_data), i32(len(sound_data)))
+                    defer raylib.UnloadWave(global_asset_wave)
+
+                    assert(header.handle != nil)
+                    assert(int(header.handle) < len(global_asset_sounds))
+                    assert(global_asset_sounds[header.handle] == {})
+
+                    global_asset_sounds[header.handle] = raylib.LoadSoundFromWave(global_asset_wave)
+
+                }
+
+
+
+                // Fonts.
+
+                case Global_Asset_Pack_Font_Header: {
+
+
+
+                    // Get font data.
+
+                    font_data : []u8
+
+                    assert(u32(len(remaining_global_asset_pack_data)) >= header.font_length)
+
+                    font_data                        = remaining_global_asset_pack_data[:header.font_length ]
+                    remaining_global_asset_pack_data = remaining_global_asset_pack_data[ header.font_length:]
+
+
+
+                    // Load asset font.
+
+                    assert(header.handle != nil)
+                    assert(int(header.handle) < len(global_asset_fonts))
+                    assert(global_asset_fonts[header.handle] == {})
+
+                    global_asset_fonts[header.handle] = raylib.LoadFontFromMemory(
+                        fileType       = ".ttf",
+                        fileData       = raw_data(font_data),
+                        dataSize       = i32(len(font_data)),
+                        fontSize       = 96,
+                        codepoints     = nil,
+                        codepointCount = 0,
+                    )
+
+                }
+
+
+
+                case: panic("Invalid.")
+
+            }
+
         }
-    }
 
-    asset_sounds := [Asset_Sound]raylib.Sound {}
-
-    for &asset_sound, asset_sound_i in asset_sounds {
-        if asset_sound_i != nil {
-            asset_sound = raylib.LoadSound(fmt.ctprintf("./media/{}.wav", reflect.enum_string(asset_sound_i)))
-        }
-    }
-
-    defer for asset_sound, asset_sound_i in asset_sounds {
-        if asset_sound_i != nil {
-            raylib.UnloadSound(asset_sound)
-        }
-    }
-
-    asset_fonts := [Asset_Font]raylib.Font {}
-
-    for &asset_font, asset_font_i in asset_fonts {
-        if asset_font_i != nil {
-            asset_font = raylib.LoadFontEx(
-                fileName       = fmt.ctprintf("./media/{}.ttf", reflect.enum_string(asset_font_i)),
-                fontSize       = 96,
-                codepoints     = nil,
-                codepointCount = 0,
-            )
-        }
-    }
-
-    defer for asset_font, asset_font_i in asset_fonts {
-        if asset_font_i != nil {
-            raylib.UnloadFont(asset_font)
-        }
     }
 
 
 
     ////////////////////////////////////////////////////////////////////////////////
-
-
-
+    //
     // Main loop.
+    //
 
     Mode :: enum {
         Normal,
@@ -261,7 +521,7 @@ main :: proc() {
 
 
 
-        ////////////////////////////////////////
+        ////////////////////////////////////////////////////////////////////////////////
         //
         // Update Rolypoly.
         //
@@ -269,8 +529,8 @@ main :: proc() {
         rolypoly_dest := raylib.Rectangle {
             0.0,
             0.0,
-            cast(f32) asset_textures[.Rolypoly].width,
-            cast(f32) asset_textures[.Rolypoly].height,
+            cast(f32) global_asset_textures[.Rolypoly].width,
+            cast(f32) global_asset_textures[.Rolypoly].height,
         }
 
         if rolypoly_animation.running {
@@ -296,10 +556,10 @@ main :: proc() {
 
                 control_animation(&rolypoly_animation, .Restart)
 
-                raylib.PlaySound(asset_sounds[.Xylo])
+                raylib.PlaySound(global_asset_sounds[.Xylo])
 
                 raylib.SetSoundVolume(
-                    asset_sounds[.Xylo],
+                    global_asset_sounds[.Xylo],
                     min(max(cast(f32) raylib.GetTime() - time_since_last_click, 0.0), 1.0)
                 )
 
@@ -319,7 +579,7 @@ main :: proc() {
 
 
 
-        ////////////////////////////////////////
+        ////////////////////////////////////////////////////////////////////////////////
         //
         // Update easel.
         //
@@ -368,7 +628,7 @@ main :: proc() {
             if hovering_easel && raylib.IsMouseButtonPressed(.LEFT) {
 
                 mode = .Easel
-                raylib.PlaySound(asset_sounds[.Easel_Open])
+                raylib.PlaySound(global_asset_sounds[.Easel_Open])
 
             }
 
@@ -377,9 +637,9 @@ main :: proc() {
             if (
                 old_easel_hover_animation_value <  0.5 &&
                 easel_hover_animation.value     >= 0.5 &&
-                !raylib.IsSoundPlaying(asset_sounds[.Padlock])
+                !raylib.IsSoundPlaying(global_asset_sounds[.Padlock])
             ) {
-                raylib.PlaySound(asset_sounds[.Padlock])
+                raylib.PlaySound(global_asset_sounds[.Padlock])
             }
 
             if easel_hover_animation.value == 1 && raylib.IsMouseButtonPressed(.LEFT) {
@@ -387,13 +647,13 @@ main :: proc() {
                 if pets < easel_cost {
 
                     control_animation(&easel_lockpad_click_animation, .Restart)
-                    raylib.PlaySound(asset_sounds[.Padlock_Locked])
+                    raylib.PlaySound(global_asset_sounds[.Padlock_Locked])
 
                 } else {
 
                     pets           -= easel_cost
                     easel_unlocked  = true
-                    raylib.PlaySound(asset_sounds[.Padlock_Unlocked])
+                    raylib.PlaySound(global_asset_sounds[.Padlock_Unlocked])
 
                 }
 
@@ -411,7 +671,7 @@ main :: proc() {
 
 
 
-        ////////////////////////////////////////
+        ////////////////////////////////////////////////////////////////////////////////
         //
         // Update easel canvas.
         //
@@ -488,7 +748,7 @@ main :: proc() {
                 raylib.ImageClearBackground(&easel_canvas_image, easel_default_color)
 
                 mode = .Normal
-                raylib.PlaySound(asset_sounds[.Easel_Close])
+                raylib.PlaySound(global_asset_sounds[.Easel_Close])
 
             }
 
@@ -498,7 +758,7 @@ main :: proc() {
 
 
 
-        ////////////////////////////////////////
+        ////////////////////////////////////////////////////////////////////////////////
         //
         // Render.
         //
@@ -512,13 +772,13 @@ main :: proc() {
 
 
 
-            ////////////////////////////////////////
+            ////////////////////////////////////////////////////////////////////////////////
             //
             // Render statistics.
             //
 
             raylib.DrawTextEx(
-                font     = asset_fonts[.Sniglet],
+                font     = global_asset_fonts[.Sniglet],
                 text     = fmt.ctprintf("Pets: {}", pets),
                 position = { 10, 10 },
                 fontSize = 40,
@@ -528,7 +788,7 @@ main :: proc() {
 
 
 
-            ////////////////////////////////////////
+            ////////////////////////////////////////////////////////////////////////////////
             //
             // Render Rolypoly.
             //
@@ -536,8 +796,8 @@ main :: proc() {
             if mode == .Normal {
 
                 raylib.DrawTexturePro(
-                    texture  = asset_textures[.Rolypoly],
-                    source   = { 0.0, 0.0, cast(f32) asset_textures[.Rolypoly].width, cast(f32) asset_textures[.Rolypoly].height },
+                    texture  = global_asset_textures[.Rolypoly],
+                    source   = { 0.0, 0.0, cast(f32) global_asset_textures[.Rolypoly].width, cast(f32) global_asset_textures[.Rolypoly].height },
                     dest     = rolypoly_dest,
                     origin   = { 0.0, 0.0 },
                     rotation = 0.0,
@@ -548,7 +808,7 @@ main :: proc() {
 
 
 
-            ////////////////////////////////////////
+            ////////////////////////////////////////////////////////////////////////////////
             //
             // Render friend.
             //
@@ -591,7 +851,7 @@ main :: proc() {
 
 
 
-            ////////////////////////////////////////
+            ////////////////////////////////////////////////////////////////////////////////
             //
             // Render easel.
             //
@@ -599,8 +859,8 @@ main :: proc() {
             if mode == .Normal {
 
                 raylib.DrawTexturePro(
-                    texture  = asset_textures[.Easel],
-                    source   = { 0, 0, cast(f32) asset_textures[.Easel].width, cast(f32) asset_textures[.Easel].height },
+                    texture  = global_asset_textures[.Easel],
+                    source   = { 0, 0, cast(f32) global_asset_textures[.Easel].width, cast(f32) global_asset_textures[.Easel].height },
                     dest     = easel_dest,
                     origin   = easel_origin,
                     rotation = 0,
@@ -620,8 +880,8 @@ main :: proc() {
                     easel_padlock_rotation += math.sin(ease_animation(0, 6, easel_lockpad_click_animation, .Cubic_Out)) * 10
 
                     raylib.DrawTexturePro(
-                        texture  = asset_textures[.Padlock],
-                        source   = { 0, 0, cast(f32) asset_textures[.Padlock].width, cast(f32) asset_textures[.Padlock].height },
+                        texture  = global_asset_textures[.Padlock],
+                        source   = { 0, 0, cast(f32) global_asset_textures[.Padlock].width, cast(f32) global_asset_textures[.Padlock].height },
                         dest     = easel_padlock_dest,
                         origin   = { f32(easel_padlock_dest.width) / 2, f32(easel_padlock_dest.height) / 2 },
                         rotation = easel_padlock_rotation,
@@ -644,7 +904,7 @@ main :: proc() {
                         BUBBLE_DIALOG_OUTLINE   :: 4
 
                         measurement := raylib.MeasureTextEx(
-                            font     = asset_fonts[.Sniglet],
+                            font     = global_asset_fonts[.Sniglet],
                             text     = message,
                             fontSize = BUBBLE_DIALOG_FONT_SIZE,
                             spacing  = 0,
@@ -700,7 +960,7 @@ main :: proc() {
                         )
 
                         raylib.DrawTextEx(
-                            font     = asset_fonts[.Sniglet],
+                            font     = global_asset_fonts[.Sniglet],
                             text     = message,
                             position = {
                                 bubble_rectangle.x + BUBBLE_DIALOG_PADDING,
@@ -719,7 +979,7 @@ main :: proc() {
 
 
 
-            ////////////////////////////////////////
+            ////////////////////////////////////////////////////////////////////////////////
             //
             // Render easel canvas.
             //
@@ -753,8 +1013,8 @@ main :: proc() {
                 }
 
                 raylib.DrawTexturePro(
-                    texture  = asset_textures[.Submit_Button],
-                    source   = { 0.0, 0.0, f32(asset_textures[.Submit_Button].width), f32(asset_textures[.Submit_Button].height) },
+                    texture  = global_asset_textures[.Submit_Button],
+                    source   = { 0.0, 0.0, f32(global_asset_textures[.Submit_Button].width), f32(global_asset_textures[.Submit_Button].height) },
                     dest     = submit_button_dest,
                     origin   = submit_button_origin,
                     rotation = 0.0,
@@ -765,7 +1025,7 @@ main :: proc() {
 
 
 
-            ////////////////////////////////////////
+            ////////////////////////////////////////////////////////////////////////////////
             //
             // Render cursor.
             //
@@ -775,13 +1035,13 @@ main :: proc() {
                 cursor_dest := raylib.Rectangle {
                     mouse_position.x + 4.0,
                     mouse_position.y + 10.0,
-                    cast(f32) asset_textures[.Cursor].width,
-                    cast(f32) asset_textures[.Cursor].height
+                    cast(f32) global_asset_textures[.Cursor].width,
+                    cast(f32) global_asset_textures[.Cursor].height
                 }
 
                 raylib.DrawTexturePro(
-                    texture  = asset_textures[.Cursor],
-                    source   = { 0.0, 0.0, cast(f32) asset_textures[.Cursor].width, cast(f32) asset_textures[.Cursor].height },
+                    texture  = global_asset_textures[.Cursor],
+                    source   = { 0.0, 0.0, cast(f32) global_asset_textures[.Cursor].width, cast(f32) global_asset_textures[.Cursor].height },
                     dest     = cursor_dest,
                     origin   = { cursor_dest.width / 2.0, cursor_dest.height / 2.0 },
                     rotation = 150.0 if raylib.IsMouseButtonDown(.LEFT) else 160.0,
