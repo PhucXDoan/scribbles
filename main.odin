@@ -274,18 +274,26 @@ main :: proc() {
             raylib.ShowCursor()
         }
 
+        k := 1 + 0.05 * (1 - math.sin(math.PI / 2 * rolypoly_animation.value))
+
+        rolypoly_dest := raylib.Rectangle {
+            0.0,
+            0.0,
+            cast(f32) rolypoly_texture.width  / (k if rolypoly_animation.running else 1.0),
+            cast(f32) rolypoly_texture.height * (k if rolypoly_animation.running else 1.0),
+        }
+
+        rolypoly_dest.x = cast(f32) raylib.GetScreenWidth()  / 2.0 - rolypoly_dest.width  / 2.0
+        rolypoly_dest.y = cast(f32) raylib.GetScreenHeight() / 2.0 - rolypoly_dest.height / 2.0
+
+
         switch mode {
 
             case .Main: {
 
                 is_hovering = raylib.CheckCollisionPointRec(
                     mouse_position,
-                    raylib.Rectangle{
-                        cast(f32) raylib.GetScreenWidth()  / 2.0 - cast(f32) rolypoly_texture.width  / 2.0,
-                        cast(f32) raylib.GetScreenHeight() / 2.0 - cast(f32) rolypoly_texture.height / 2.0,
-                        cast(f32) rolypoly_texture.width,
-                        cast(f32) rolypoly_texture.height,
-                    },
+                    rolypoly_dest,
                 )
 
                 if is_hovering && raylib.IsMouseButtonPressed(.LEFT) {
@@ -409,8 +417,8 @@ main :: proc() {
         update_animation(&easel_hover_animation)
 
         if (
-            old_easel_hover_animation_value <  0.25 &&
-            easel_hover_animation.value     >= 0.25 &&
+            old_easel_hover_animation_value <  0.5 &&
+            easel_hover_animation.value     >= 0.5 &&
             !raylib.IsSoundPlaying(padlock_sound)
         ) {
             raylib.PlaySound(padlock_sound)
@@ -451,22 +459,10 @@ main :: proc() {
 
                 case .Main: {
 
-                    k := 1 + 0.05 * (1 - math.sin(math.PI / 2 * rolypoly_animation.value))
-
-                    dest := raylib.Rectangle {
-                        0.0,
-                        0.0,
-                        cast(f32) rolypoly_texture.width  / (k if rolypoly_animation.running else 1.0),
-                        cast(f32) rolypoly_texture.height * (k if rolypoly_animation.running else 1.0),
-                    }
-
-                    dest.x = cast(f32) raylib.GetScreenWidth()  / 2.0 - dest.width  / 2.0
-                    dest.y = cast(f32) raylib.GetScreenHeight() / 2.0 - dest.height / 2.0
-
                     raylib.DrawTexturePro(
                         texture  = rolypoly_texture,
                         source   = { 0.0, 0.0, cast(f32) rolypoly_texture.width, cast(f32) rolypoly_texture.height },
-                        dest     = dest,
+                        dest     = rolypoly_dest,
                         origin   = { 0.0, 0.0 },
                         rotation = 0.0,
                         tint     = is_hovering ? raylib.YELLOW : raylib.WHITE,
@@ -679,6 +675,79 @@ main :: proc() {
                 rotation = math.sin(ease_animation(0, 6, easel_hover_animation, .Cubic_Out)) * 10,
                 tint     = raylib.WHITE,
             )
+
+            if easel_hover_animation.value == 1 {
+
+                x       := f32(rolypoly_dest.x + rolypoly_dest.width  * 0.75)
+                y       := f32(rolypoly_dest.y + rolypoly_dest.height * 0.10)
+                message := cstring("I need 100 pets...")
+
+                BUBBLE_DIALOG_FONT_SIZE :: 20
+                BUBBLE_DIALOG_PADDING   :: 15
+                BUBBLE_DIALOG_ROUNDNESS :: 0.3
+                BUBBLE_DIALOG_OUTLINE   :: 4
+
+                text_width  := f32(raylib.MeasureText(message, BUBBLE_DIALOG_FONT_SIZE))
+                text_height := f32(BUBBLE_DIALOG_FONT_SIZE)
+
+                bubble_rectangle := raylib.Rectangle {
+                    x      = x - BUBBLE_DIALOG_PADDING / 2,
+                    y      = y - BUBBLE_DIALOG_PADDING * 3 - text_height,
+                    width  = text_width  + BUBBLE_DIALOG_PADDING * 2,
+                    height = text_height + BUBBLE_DIALOG_PADDING * 2,
+                }
+
+                vertices := [?][2]f32 {
+                    { x, bubble_rectangle.y + bubble_rectangle.height },
+                    { x, y },
+                    { x + (x - bubble_rectangle.x) * 2, bubble_rectangle.y + bubble_rectangle.height },
+                }
+
+                raylib.DrawRectangleRoundedLinesEx(
+                    rec       = bubble_rectangle,
+                    roundness = BUBBLE_DIALOG_ROUNDNESS,
+                    segments  = 0,
+                    lineThick = BUBBLE_DIALOG_OUTLINE,
+                    color     = raylib.BLACK,
+                )
+
+                raylib.DrawTriangle(
+                    v1       = vertices[0],
+                    v2       = vertices[1],
+                    v3       = vertices[2],
+                    color    = raylib.LIGHTGRAY,
+                )
+
+                raylib.DrawLineEx(
+                    startPos = vertices[0],
+                    endPos   = vertices[1],
+                    thick    = BUBBLE_DIALOG_OUTLINE,
+                    color    = raylib.BLACK,
+                )
+
+                raylib.DrawLineEx(
+                    startPos = vertices[1],
+                    endPos   = vertices[2],
+                    thick    = BUBBLE_DIALOG_OUTLINE,
+                    color    = raylib.BLACK,
+                )
+
+                raylib.DrawRectangleRounded(
+                    rec       = bubble_rectangle,
+                    roundness = BUBBLE_DIALOG_ROUNDNESS,
+                    segments  = 0,
+                    color     = raylib.LIGHTGRAY,
+                )
+
+                raylib.DrawText(
+                    message,
+                    i32(bubble_rectangle.x + BUBBLE_DIALOG_PADDING),
+                    i32(bubble_rectangle.y + BUBBLE_DIALOG_PADDING),
+                    BUBBLE_DIALOG_FONT_SIZE,
+                    raylib.BLACK
+                )
+
+            }
 
 
 
