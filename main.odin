@@ -13,6 +13,40 @@ import "vendor:raylib"
 
 ////////////////////////////////////////////////////////////////////////////////
 //
+// Miscellaneous.
+//
+
+eat_type :: proc(slice : ^[]u8, $T : typeid) -> ^T {
+
+    assert(len(slice^) >= size_of(T))
+
+    result := transmute(^T) raw_data(slice^)
+    slice^  = slice[size_of(T):]
+
+    return result
+
+}
+
+eat_bytes :: proc(slice : ^[]u8, length : int) -> []u8 {
+
+    assert(len(slice) >= length)
+
+    result := slice[:length ]
+    slice^  = slice[ length:]
+
+    return result
+
+}
+
+eat :: proc {
+    eat_type,
+    eat_bytes,
+}
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
 // Animation.
 //
 
@@ -153,28 +187,26 @@ main :: proc() {
     }
 
     #assert(size_of(Global_Asset_Pack_Header) == 32)
-    Global_Asset_Pack_Header :: union {
+    Global_Asset_Pack_Header :: union #no_nil {
+        [31]u8,
         Global_Asset_Pack_Texture_Header,
         Global_Asset_Pack_Sound_Header,
         Global_Asset_Pack_Font_Header,
     }
 
     Global_Asset_Pack_Texture_Header :: struct #packed {
-        handle       : Global_Asset_Texture_Handle,
-        image_length : u32,
-        _            : [23]u8,
+        handle : Global_Asset_Texture_Handle,
+        length : u32,
     }
 
     Global_Asset_Pack_Sound_Header :: struct #packed {
-        handle       : Global_Asset_Sound_Handle,
-        sound_length : u32,
-        _            : [23]u8,
+        handle : Global_Asset_Sound_Handle,
+        length : u32,
     }
 
     Global_Asset_Pack_Font_Header :: struct #packed {
-        handle      : Global_Asset_Font_Handle,
-        font_length : u32,
-        _           : [23]u8,
+        handle : Global_Asset_Font_Handle,
+        length : u32,
     }
 
     GLOBAL_ASSET_PACK_FILE_PATH :: "./media/Global_Asset_Pack.bin"
@@ -209,8 +241,8 @@ main :: proc() {
                 global_asset_texture_file_data := os.read_entire_file(global_asset_texture_file_path, context.temp_allocator) or_else panic("Failed.")
 
                 global_asset_pack_texture_header : Global_Asset_Pack_Header = Global_Asset_Pack_Texture_Header {
-                    handle       = global_asset_texture_handle,
-                    image_length = u32(len(global_asset_texture_file_data)),
+                    handle = global_asset_texture_handle,
+                    length = u32(len(global_asset_texture_file_data)),
                 }
 
                 _ = os.write(global_asset_pack_file_handle, mem.any_to_bytes(global_asset_pack_texture_header)) or_else panic("Failed.")
@@ -243,8 +275,8 @@ main :: proc() {
                 global_asset_sound_file_data := os.read_entire_file(global_asset_sound_file_path, context.temp_allocator) or_else panic("Failed.")
 
                 global_asset_pack_sound_header : Global_Asset_Pack_Header = Global_Asset_Pack_Sound_Header {
-                    handle       = global_asset_sound_handle,
-                    sound_length = u32(len(global_asset_sound_file_data)),
+                    handle = global_asset_sound_handle,
+                    length = u32(len(global_asset_sound_file_data)),
                 }
 
                 _ = os.write(global_asset_pack_file_handle, mem.any_to_bytes(global_asset_pack_sound_header)) or_else panic("Failed.")
@@ -277,8 +309,8 @@ main :: proc() {
                 global_asset_font_file_data := os.read_entire_file(global_asset_font_file_path, context.temp_allocator) or_else panic("Failed.")
 
                 global_asset_pack_font_header : Global_Asset_Pack_Header = Global_Asset_Pack_Font_Header {
-                    handle      = global_asset_font_handle,
-                    font_length = u32(len(global_asset_font_file_data)),
+                    handle = global_asset_font_handle,
+                    length = u32(len(global_asset_font_file_data)),
                 }
 
                 _ = os.write(global_asset_pack_file_handle, mem.any_to_bytes(global_asset_pack_font_header)) or_else panic("Failed.")
@@ -313,6 +345,8 @@ main :: proc() {
     raylib.InitAudioDevice()
     defer raylib.CloseAudioDevice()
 
+    raylib.SetExitKey(nil)
+
 
 
     ////////////////////////////////////////////////////////////////////////////////
@@ -339,53 +373,19 @@ main :: proc() {
 
         }
 
-        for {
+        for len(remaining_global_asset_pack_data) >= 1 {
 
-
-
-            // Done processing all of the data?
-
-            if len(remaining_global_asset_pack_data) == 0 {
-                break
-            }
-
-
-
-            // Get header.
-
-            global_asset_pack_header : ^Global_Asset_Pack_Header
-
-            assert(len(remaining_global_asset_pack_data) >= size_of(global_asset_pack_header^))
-
-            global_asset_pack_header         = transmute(^Global_Asset_Pack_Header) raw_data(remaining_global_asset_pack_data)
-            remaining_global_asset_pack_data = remaining_global_asset_pack_data[size_of(global_asset_pack_header^):]
-
-
-
-            // Handle header.
+            global_asset_pack_header := eat(&remaining_global_asset_pack_data, Global_Asset_Pack_Header)
 
             switch header in global_asset_pack_header {
 
 
 
-                // Textures.
+                // Load global textures.
 
                 case Global_Asset_Pack_Texture_Header: {
 
-
-
-                    // Get image data.
-
-                    image_data : []u8
-
-                    assert(u32(len(remaining_global_asset_pack_data)) >= header.image_length)
-
-                    image_data                       = remaining_global_asset_pack_data[:header.image_length ]
-                    remaining_global_asset_pack_data = remaining_global_asset_pack_data[ header.image_length:]
-
-
-
-                    // Load asset texture.
+                    image_data := eat(&remaining_global_asset_pack_data, int(header.length))
 
                     global_asset_image := raylib.LoadImageFromMemory(".png", raw_data(image_data), i32(len(image_data)))
                     defer raylib.UnloadImage(global_asset_image)
@@ -400,24 +400,11 @@ main :: proc() {
 
 
 
-                // Sounds.
+                // Load global sounds.
 
                 case Global_Asset_Pack_Sound_Header: {
 
-
-
-                    // Get sound data.
-
-                    sound_data : []u8
-
-                    assert(u32(len(remaining_global_asset_pack_data)) >= header.sound_length)
-
-                    sound_data                       = remaining_global_asset_pack_data[:header.sound_length ]
-                    remaining_global_asset_pack_data = remaining_global_asset_pack_data[ header.sound_length:]
-
-
-
-                    // Load asset sound.
+                    sound_data := eat(&remaining_global_asset_pack_data, int(header.length))
 
                     global_asset_wave := raylib.LoadWaveFromMemory(".wav", raw_data(sound_data), i32(len(sound_data)))
                     defer raylib.UnloadWave(global_asset_wave)
@@ -432,24 +419,11 @@ main :: proc() {
 
 
 
-                // Fonts.
+                // Load global fonts.
 
                 case Global_Asset_Pack_Font_Header: {
 
-
-
-                    // Get font data.
-
-                    font_data : []u8
-
-                    assert(u32(len(remaining_global_asset_pack_data)) >= header.font_length)
-
-                    font_data                        = remaining_global_asset_pack_data[:header.font_length ]
-                    remaining_global_asset_pack_data = remaining_global_asset_pack_data[ header.font_length:]
-
-
-
-                    // Load asset font.
+                    font_data := eat(&remaining_global_asset_pack_data, int(header.length))
 
                     assert(header.handle != nil)
                     assert(int(header.handle) < len(global_asset_fonts))
@@ -468,7 +442,8 @@ main :: proc() {
 
 
 
-                case: panic("Invalid.")
+                case [31]u8 : panic("Invalid.")
+                case        : panic("Invalid.")
 
             }
 
@@ -480,42 +455,145 @@ main :: proc() {
 
     ////////////////////////////////////////////////////////////////////////////////
     //
+    // Load local save-file.
+    //
+
+    SAVE_FILE_PATH :: "./scribbles.save"
+
+    #assert(size_of(Save_File_Header) == 32)
+    Save_File_Header :: union #no_nil {
+        [31]u8,
+        Game_State_Prefix,
+    }
+
+    Game_State_Prefix :: struct #packed {
+        version : u8,
+    }
+
+    #assert(size_of(Game_State) == 256)
+    Game_State :: union #no_nil {
+        [255]u8,
+        Game_State_V1,
+    }
+
+    Game_State_V1 :: struct #packed {
+        pets           : u128,
+        easel_unlocked : b8,
+    }
+
+
+
+    game_state : Game_State_V1
+
+    {
+
+        remaining_save_file_data, save_file_reading_error := os.read_entire_file(SAVE_FILE_PATH, context.temp_allocator)
+
+        if save_file_reading_error != nil {
+            save_game(game_state)
+            remaining_save_file_data = os.read_entire_file(SAVE_FILE_PATH, context.temp_allocator) or_else panic("Failed.")
+        }
+
+        for len(remaining_save_file_data) >= 1 {
+
+            save_file_header := eat(&remaining_save_file_data, Save_File_Header)
+
+            switch header in save_file_header {
+
+
+
+                // Load game state.
+
+                case Game_State_Prefix: {
+
+                    save_game_state := eat(&remaining_save_file_data, Game_State)
+
+                    switch state in save_game_state {
+
+                        case Game_State_V1: {
+                            assert(game_state == {})
+                            game_state = state
+                        }
+
+                        case [255]u8 : panic("Invalid.")
+                        case         : panic("Invalid.")
+
+                    }
+
+                }
+
+
+
+                case [31]u8 : panic("Invalid.")
+                case        : panic("Invalid.")
+
+            }
+
+        }
+
+    }
+
+    save_game :: proc(game_state : Game_State) {
+
+        fmt.printf("Saving to '{}'...\n", SAVE_FILE_PATH)
+
+        save_file_handle := os.open(SAVE_FILE_PATH, os.O_CREATE | os.O_TRUNC | os.O_APPEND) or_else panic("Failed.")
+        defer os.close(save_file_handle)
+
+
+
+        // Save game state.
+
+        save_file_header : Save_File_Header = Game_State_Prefix {
+            version = 1,
+        }
+
+        save_game_state : Game_State = game_state
+
+        _ = os.write(save_file_handle, mem.any_to_bytes(save_file_header)) or_else panic("Failed.")
+        _ = os.write(save_file_handle, mem.any_to_bytes(save_game_state )) or_else panic("Failed.")
+
+
+
+    }
+
+    save_game(game_state)
+
+
+
+    ////////////////////////////////////////////////////////////////////////////////
+    //
     // Main loop.
     //
+
+    EASEL_COST          :: 100
+    EASEL_DEFAULT_COLOR :: raylib.Color { 234, 240, 243, 255 }
 
     Mode :: enum {
         Normal,
         Easel,
     }
 
-    mode                  := Mode.Normal
-    time_since_last_click := cast(f32) 0.0
-    friend_animation      := Animation { duration = 1 }
-    friend_x              := cast(f32) 100.0
-    pets                  := 0
-
-    rolypoly_animation := Animation { duration = 0.25 }
-
-    easel_unlocked                := false
-    easel_cost                    := 100
-    easel_default_color           := raylib.Color { 234, 240, 243, 255 }
+    mode                          := Mode.Normal
+    time_since_last_click         := cast(f32) 0.0
+    friend_animation              := Animation { duration = 1 }
+    friend_x                      := cast(f32) 100.0
+    rolypoly_animation            := Animation { duration = 0.25 }
     easel_hover_animation         := Animation { duration = 0.20 }
     easel_lockpad_click_animation := Animation { duration = 0.10 }
 
-    easel_canvas_image := raylib.GenImageColor(8, 8, easel_default_color)
-    defer raylib.UnloadImage(easel_canvas_image)
-
+    easel_canvas_image   := raylib.GenImageColor(8, 8, EASEL_DEFAULT_COLOR)
     easel_canvas_texture := raylib.LoadTextureFromImage(easel_canvas_image)
-    defer raylib.UnloadTexture(easel_canvas_texture)
+    friend_texture       :  Maybe(raylib.Texture)
 
-    friend_texture : Maybe(raylib.Texture)
-    defer  {
-        if friend_texture != nil {
-            raylib.UnloadTexture(friend_texture.?)
+
+
+    for {
+
+        if raylib.WindowShouldClose() {
+            save_game(game_state)
+            break
         }
-    }
-
-    for !raylib.WindowShouldClose() {
 
         mouse_position := raylib.GetMousePosition()
 
@@ -552,7 +630,7 @@ main :: proc() {
 
             if hovering_rolypoly && raylib.IsMouseButtonPressed(.LEFT) {
 
-                pets += 1
+                game_state.pets += 1
 
                 control_animation(&rolypoly_animation, .Restart)
 
@@ -591,7 +669,7 @@ main :: proc() {
             200,
         }
 
-        if easel_unlocked {
+        if game_state.easel_unlocked {
             easel_dest.width  *= ease_animation(1.0, 1.025, easel_hover_animation, .Cubic_Out)
             easel_dest.height *= ease_animation(1.0, 1.025, easel_hover_animation, .Cubic_Out)
         }
@@ -623,7 +701,7 @@ main :: proc() {
 
 
 
-        if easel_unlocked {
+        if game_state.easel_unlocked {
 
             if hovering_easel && raylib.IsMouseButtonPressed(.LEFT) {
 
@@ -644,15 +722,15 @@ main :: proc() {
 
             if easel_hover_animation.value == 1 && raylib.IsMouseButtonPressed(.LEFT) {
 
-                if pets < easel_cost {
+                if game_state.pets < u128(EASEL_COST) {
 
                     control_animation(&easel_lockpad_click_animation, .Restart)
                     raylib.PlaySound(global_asset_sounds[.Padlock_Locked])
 
                 } else {
 
-                    pets           -= easel_cost
-                    easel_unlocked  = true
+                    game_state.pets           -= u128(EASEL_COST)
+                    game_state.easel_unlocked  = true
                     raylib.PlaySound(global_asset_sounds[.Padlock_Unlocked])
 
                 }
@@ -745,7 +823,7 @@ main :: proc() {
 
                 friend_texture = raylib.LoadTextureFromImage(easel_canvas_image)
 
-                raylib.ImageClearBackground(&easel_canvas_image, easel_default_color)
+                raylib.ImageClearBackground(&easel_canvas_image, EASEL_DEFAULT_COLOR)
 
                 mode = .Normal
                 raylib.PlaySound(global_asset_sounds[.Easel_Close])
@@ -779,7 +857,7 @@ main :: proc() {
 
             raylib.DrawTextEx(
                 font     = global_asset_fonts[.Sniglet],
-                text     = fmt.ctprintf("Pets: {}", pets),
+                text     = fmt.ctprintf("Pets: {}", game_state.pets),
                 position = { 10, 10 },
                 fontSize = 40,
                 spacing  = 0,
@@ -864,10 +942,10 @@ main :: proc() {
                     dest     = easel_dest,
                     origin   = easel_origin,
                     rotation = 0,
-                    tint     = raylib.WHITE if easel_unlocked else raylib.GRAY,
+                    tint     = raylib.WHITE if game_state.easel_unlocked else raylib.GRAY,
                 )
 
-                if !easel_unlocked {
+                if !game_state.easel_unlocked {
 
                     easel_padlock_dest := raylib.Rectangle {
                         easel_dest.x,
@@ -893,9 +971,9 @@ main :: proc() {
                         x       := f32(rolypoly_dest.x + rolypoly_dest.width  * 0.75)
                         y       := f32(rolypoly_dest.y + rolypoly_dest.height * 0.10)
                         message := (
-                            pets < easel_cost
-                                ? fmt.ctprintf("I need {} pets...", easel_cost)
-                                : fmt.ctprintf("Unlock for {} pets...?", easel_cost)
+                            game_state.pets < u128(EASEL_COST)
+                                ? fmt.ctprintf("I need {} pets...", EASEL_COST)
+                                : fmt.ctprintf("Unlock for {} pets...?", EASEL_COST)
                         )
 
                         BUBBLE_DIALOG_FONT_SIZE :: 30
