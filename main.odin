@@ -9,17 +9,6 @@ import "vendor:raylib"
 
 
 
-rgba_lerp :: proc(a : raylib.Color, b : raylib.Color, t : f32) -> raylib.Color {
-    return raylib.Color {
-        u8(math.lerp(f32(a.r), f32(b.r), t)),
-        u8(math.lerp(f32(a.g), f32(b.g), t)),
-        u8(math.lerp(f32(a.b), f32(b.b), t)),
-        u8(math.lerp(f32(a.a), f32(b.a), t)),
-    }
-}
-
-
-
 main :: proc() {
 
 
@@ -62,6 +51,12 @@ main :: proc() {
     padlock_unlocked_sound := raylib.LoadSound("./media/padlock_unlocked.wav")
     defer raylib.UnloadSound(padlock_unlocked_sound)
 
+    easel_open_sound := raylib.LoadSound("./media/easel_open.wav")
+    defer raylib.UnloadSound(easel_open_sound)
+
+    easel_close_sound := raylib.LoadSound("./media/easel_close.wav")
+    defer raylib.UnloadSound(easel_close_sound)
+
     rolypoly_texture := raylib.LoadTextureFromImage(rolypoly_image)
     defer raylib.UnloadTexture(rolypoly_texture)
 
@@ -70,12 +65,6 @@ main :: proc() {
 
     cursor_texture := raylib.LoadTextureFromImage(cursor_image)
     defer raylib.UnloadTexture(cursor_texture)
-
-    canvas_image := raylib.GenImageColor(16, 16, raylib.SKYBLUE)
-    defer raylib.UnloadImage(canvas_image)
-
-    canvas_texture := raylib.LoadTextureFromImage(canvas_image)
-    defer raylib.UnloadTexture(canvas_texture)
 
     friend_texture : Maybe(raylib.Texture)
     defer  {
@@ -89,6 +78,9 @@ main :: proc() {
 
     padlock_texture := raylib.LoadTexture("./media/padlock.png")
     defer raylib.UnloadTexture(padlock_texture)
+
+    font := raylib.LoadFontEx("./media/Sniglet.ttf", 96, nil, 0)
+    defer raylib.UnloadFont(font)
 
 
 
@@ -194,11 +186,11 @@ main :: proc() {
     // Main loop.
 
     Mode :: enum {
-        Main,
-        Drawing,
+        Normal,
+        Easel,
     }
 
-    mode                  := Mode.Main
+    mode                  := Mode.Easel
     time_since_last_click := cast(f32) 0.0
     friend_animation_t    := cast(f32) 0.0
     friend_x              := cast(f32) 100.0
@@ -206,10 +198,17 @@ main :: proc() {
 
     rolypoly_animation := Animation { duration = 0.25 }
 
-    easel_unlocked                := false
+    easel_unlocked                := true // TODO.
     easel_cost                    := 10
+    easel_default_color           := raylib.Color { 234, 240, 243, 255 }
     easel_lockpad_hover_animation := Animation { duration = 0.20 }
     easel_lockpad_click_animation := Animation { duration = 0.10 }
+
+    easel_canvas_image := raylib.GenImageColor(8, 8, easel_default_color)
+    defer raylib.UnloadImage(easel_canvas_image)
+
+    easel_canvas_texture := raylib.LoadTextureFromImage(easel_canvas_image)
+    defer raylib.UnloadTexture(easel_canvas_texture)
 
     for !raylib.WindowShouldClose() {
 
@@ -222,14 +221,14 @@ main :: proc() {
         is_hovering := false
 
         if raylib.IsKeyPressed(.SPACE) {
-            if mode == .Main {
-                mode = .Drawing
+            if mode == .Normal {
+                mode = .Easel
             } else {
-                mode = .Main
+                mode = .Normal
             }
         }
 
-        if mode == .Drawing {
+        if mode == .Easel {
             raylib.HideCursor()
         } else {
             raylib.ShowCursor()
@@ -250,7 +249,7 @@ main :: proc() {
 
         switch mode {
 
-            case .Main: {
+            case .Normal: {
 
                 is_hovering = raylib.CheckCollisionPointRec(
                     mouse_position,
@@ -279,7 +278,7 @@ main :: proc() {
 
             }
 
-            case .Drawing: {
+            case .Easel: {
             }
 
         }
@@ -318,7 +317,10 @@ main :: proc() {
         if easel_unlocked {
 
             if hovering_easel && raylib.IsMouseButtonPressed(.LEFT) {
-                mode = .Drawing
+
+                mode = .Easel
+                raylib.PlaySound(easel_open_sound)
+
             }
 
         } else {
@@ -374,6 +376,93 @@ main :: proc() {
 
         ////////////////////////////////////////
         //
+        // Update easel canvas.
+        //
+
+        easel_canvas_dest := raylib.Rectangle {
+            cast(f32) raylib.GetScreenWidth()  / 2.0,
+            cast(f32) raylib.GetScreenHeight() / 2.0,
+            400.0,
+            400.0,
+        }
+
+        easel_canvas_origin := raylib.Vector2 {
+            easel_canvas_dest.width  / 2,
+            easel_canvas_dest.height / 2,
+        }
+
+        easel_canvas_cell_dimensions := raylib.Vector2 {
+            easel_canvas_dest.width  / cast(f32) easel_canvas_image.width,
+            easel_canvas_dest.height / cast(f32) easel_canvas_image.height,
+        }
+
+        hovered_easel_canvas_cell_coordinate_x := cast(int) math.floor((mouse_position.x - (easel_canvas_dest.x - easel_canvas_origin.x)) / easel_canvas_cell_dimensions.x)
+        hovered_easel_canvas_cell_coordinate_y := cast(int) math.floor((mouse_position.y - (easel_canvas_dest.y - easel_canvas_origin.y)) / easel_canvas_cell_dimensions.y)
+        hovered_easel_canvas_cell_is_within    := (
+            0 <= hovered_easel_canvas_cell_coordinate_x && hovered_easel_canvas_cell_coordinate_x < cast(int) easel_canvas_image.width &&
+            0 <= hovered_easel_canvas_cell_coordinate_y && hovered_easel_canvas_cell_coordinate_y < cast(int) easel_canvas_image.height
+        )
+
+        submit_button_dest := raylib.Rectangle {
+            f32(raylib.GetScreenWidth() ) * 0.5,
+            f32(raylib.GetScreenHeight()) * 0.85,
+            100.0,
+            50.0,
+        }
+
+        submit_button_origin := raylib.Vector2 {
+            submit_button_dest.width  / 2,
+            submit_button_dest.height / 2,
+        }
+
+        hovering_submit_button : bool
+
+        if mode == .Easel {
+
+            hovering_submit_button = raylib.CheckCollisionPointRec(
+                mouse_position,
+                {
+                    submit_button_dest.x - submit_button_origin.x,
+                    submit_button_dest.y - submit_button_origin.y,
+                    submit_button_dest.width,
+                    submit_button_dest.height,
+                }
+            )
+
+            if raylib.IsMouseButtonPressed(.LEFT) && hovered_easel_canvas_cell_is_within {
+
+                raylib.ImageDrawPixel(
+                    &easel_canvas_image,
+                    cast(i32) hovered_easel_canvas_cell_coordinate_x,
+                    cast(i32) hovered_easel_canvas_cell_coordinate_y,
+                    { 49, 42, 22, 255 }
+                )
+
+            }
+
+            if hovering_submit_button && raylib.IsMouseButtonPressed(.LEFT) {
+
+                if friend_texture != nil {
+                    raylib.UnloadTexture(friend_texture.?)
+                }
+
+                friend_texture = raylib.LoadTextureFromImage(easel_canvas_image)
+
+                raylib.ImageClearBackground(&easel_canvas_image, easel_default_color)
+
+                mode = .Normal
+                raylib.PlaySound(easel_close_sound)
+
+            }
+
+            raylib.UpdateTexture(easel_canvas_texture, easel_canvas_image.data)
+
+        }
+
+
+
+        ////////////////////////////////////////
+        //
         // Render.
         //
 
@@ -382,7 +471,7 @@ main :: proc() {
             raylib.BeginDrawing()
             defer raylib.EndDrawing()
 
-            raylib.ClearBackground(raylib.DARKGRAY)
+            raylib.ClearBackground(raylib.BROWN if mode == .Easel else raylib.DARKGRAY)
 
 
 
@@ -392,18 +481,19 @@ main :: proc() {
             //
 
             text := fmt.ctprintf("Pets: {}", pets)
-            raylib.DrawText(
-                text,
-                10,
-                10,
-                20,
-                raylib.WHITE
+            raylib.DrawTextEx(
+                font     = font,
+                text     = text,
+                position = { 10, 10 },
+                fontSize = 40,
+                spacing  = 0,
+                tint     = raylib.WHITE,
             )
 
 
             switch mode {
 
-                case .Main: {
+                case .Normal: {
 
                     raylib.DrawTexturePro(
                         texture  = rolypoly_texture,
@@ -455,132 +545,10 @@ main :: proc() {
 
                 }
 
-                case .Drawing: {
+                case .Easel: {
 
 
 
-                    // TODO.
-
-                    canvas_center := raylib.Vector2 {
-                        cast(f32) raylib.GetScreenWidth()  / 2.0,
-                        cast(f32) raylib.GetScreenHeight() / 2.0,
-                    }
-
-                    canvas_dimensions := raylib.Vector2 {
-                        400.0,
-                        400.0,
-                    }
-
-                    canvas_cell_dimensions := raylib.Vector2 {
-                        canvas_dimensions.x / cast(f32) canvas_image.width,
-                        canvas_dimensions.y / cast(f32) canvas_image.height,
-                    }
-
-                    canvas_dest := raylib.Rectangle {
-                        canvas_center.x - canvas_dimensions.x / 2.0,
-                        canvas_center.y - canvas_dimensions.y / 2.0,
-                        canvas_dimensions.x,
-                        canvas_dimensions.y,
-                    }
-
-                    hovered_cell_coordinate_x := cast(int) math.floor((mouse_position.x - canvas_dest.x) / canvas_cell_dimensions.x)
-                    hovered_cell_coordinate_y := cast(int) math.floor((mouse_position.y - canvas_dest.y) / canvas_cell_dimensions.y)
-                    hovered_cell_within       := (
-                        0 <= hovered_cell_coordinate_x && hovered_cell_coordinate_x < cast(int) canvas_image.width &&
-                        0 <= hovered_cell_coordinate_y && hovered_cell_coordinate_y < cast(int) canvas_image.height
-                    )
-
-
-
-                    // TODO.
-
-                    if raylib.IsMouseButtonDown(.LEFT) && hovered_cell_within {
-
-                        raylib.ImageDrawPixel(
-                            &canvas_image,
-                            cast(i32) hovered_cell_coordinate_x,
-                            cast(i32) hovered_cell_coordinate_y,
-                            raylib.RED
-                        )
-
-                        raylib.UpdateTexture(canvas_texture, canvas_image.data)
-
-                    }
-
-
-
-                    // TODO.
-
-                    raylib.DrawTexturePro(
-                        texture = canvas_texture,
-                        source  = {
-                            0.0,
-                            0.0,
-                            cast(f32) canvas_texture.width,
-                            cast(f32) canvas_texture.height,
-                        },
-                        dest     = canvas_dest,
-                        origin   = { 0.0, 0.0 },
-                        rotation = 0.0,
-                        tint     = raylib.WHITE,
-                    )
-
-
-
-                    // TODO.
-
-                    if hovered_cell_within {
-
-                        raylib.DrawRectangleLines(
-                            posX   = cast(i32) (canvas_dest.x + cast(f32) hovered_cell_coordinate_x * canvas_cell_dimensions.x),
-                            posY   = cast(i32) (canvas_dest.y + cast(f32) hovered_cell_coordinate_y * canvas_cell_dimensions.y),
-                            width  = cast(i32) canvas_cell_dimensions.x,
-                            height = cast(i32) canvas_cell_dimensions.y,
-                            color  = raylib.BLACK,
-                        )
-
-                    }
-
-
-
-                    // TODO.
-
-                    submit_dest := raylib.Rectangle {
-                        f32(raylib.GetScreenWidth() ) * 0.75,
-                        f32(raylib.GetScreenHeight()) * 0.25,
-                        100.0,
-                        50.0,
-                    }
-
-                    submit_hovering := raylib.CheckCollisionPointRec(mouse_position, submit_dest)
-
-                    {
-
-                        raylib.DrawTexturePro(
-                            texture  = submit_texture,
-                            source   = { 0.0, 0.0, cast(f32) submit_texture.width, cast(f32) submit_texture.height },
-                            dest     = submit_dest,
-                            origin   = { 0.0, 0.0 },
-                            rotation = 0.0,
-                            tint     = raylib.GREEN if submit_hovering else raylib.WHITE,
-                        )
-
-                    }
-
-                    if submit_hovering && raylib.IsMouseButtonPressed(.LEFT) {
-
-                        if friend_texture != nil {
-                            raylib.UnloadTexture(friend_texture.?)
-                        }
-
-                        friend_texture = raylib.LoadTextureFromImage(canvas_image)
-
-                        raylib.ImageClearBackground(&canvas_image, raylib.SKYBLUE)
-                        raylib.UpdateTexture(canvas_texture, canvas_image.data)
-
-                        mode = .Main
-
-                    }
 
 
 
@@ -597,105 +565,183 @@ main :: proc() {
             // Render easel.
             //
 
-            raylib.DrawTexturePro(
-                texture  = easel_texture,
-                source   = { 0, 0, cast(f32) easel_texture.width, cast(f32) easel_texture.height },
-                dest     = easel_dest,
-                origin   = easel_origin,
-                rotation = 0,
-                tint     = raylib.WHITE if easel_unlocked else raylib.GRAY,
-            )
-
-            if !easel_unlocked {
-
-                easel_padlock_dest := raylib.Rectangle {
-                    easel_dest.x,
-                    easel_dest.y - easel_dest.height / 2,
-                    ease_animation(75, 100, easel_lockpad_hover_animation, .Bounce_Out),
-                    ease_animation(75, 100, easel_lockpad_hover_animation, .Bounce_Out),
-                }
-
-                easel_padlock_rotation := math.sin(ease_animation(0, 6, easel_lockpad_hover_animation, .Cubic_Out)) * 10
-                easel_padlock_rotation += math.sin(ease_animation(0, 6, easel_lockpad_click_animation, .Cubic_Out)) * 10
+            if mode == .Normal {
 
                 raylib.DrawTexturePro(
-                    texture  = padlock_texture,
-                    source   = { 0, 0, cast(f32) padlock_texture.width, cast(f32) padlock_texture.height },
-                    dest     = easel_padlock_dest,
-                    origin   = { f32(easel_padlock_dest.width) / 2, f32(easel_padlock_dest.height) / 2 },
-                    rotation = easel_padlock_rotation,
+                    texture  = easel_texture,
+                    source   = { 0, 0, cast(f32) easel_texture.width, cast(f32) easel_texture.height },
+                    dest     = easel_dest,
+                    origin   = easel_origin,
+                    rotation = 0,
+                    tint     = raylib.WHITE if easel_unlocked else raylib.GRAY,
+                )
+
+                if !easel_unlocked {
+
+                    easel_padlock_dest := raylib.Rectangle {
+                        easel_dest.x,
+                        easel_dest.y - easel_dest.height / 2,
+                        ease_animation(75, 100, easel_lockpad_hover_animation, .Bounce_Out),
+                        ease_animation(75, 100, easel_lockpad_hover_animation, .Bounce_Out),
+                    }
+
+                    easel_padlock_rotation := math.sin(ease_animation(0, 6, easel_lockpad_hover_animation, .Cubic_Out)) * 10
+                    easel_padlock_rotation += math.sin(ease_animation(0, 6, easel_lockpad_click_animation, .Cubic_Out)) * 10
+
+                    raylib.DrawTexturePro(
+                        texture  = padlock_texture,
+                        source   = { 0, 0, cast(f32) padlock_texture.width, cast(f32) padlock_texture.height },
+                        dest     = easel_padlock_dest,
+                        origin   = { f32(easel_padlock_dest.width) / 2, f32(easel_padlock_dest.height) / 2 },
+                        rotation = easel_padlock_rotation,
+                        tint     = raylib.WHITE,
+                    )
+
+                    if easel_lockpad_hover_animation.value == 1 {
+
+                        x       := f32(rolypoly_dest.x + rolypoly_dest.width  * 0.75)
+                        y       := f32(rolypoly_dest.y + rolypoly_dest.height * 0.10)
+                        message := (
+                            pets < easel_cost
+                                ? fmt.ctprintf("I need {} pets...", easel_cost)
+                                : fmt.ctprintf("Unlock for {} pets...?", easel_cost)
+                        )
+
+                        BUBBLE_DIALOG_FONT_SIZE :: 30
+                        BUBBLE_DIALOG_PADDING   :: 15
+                        BUBBLE_DIALOG_ROUNDNESS :: 0.3
+                        BUBBLE_DIALOG_OUTLINE   :: 4
+
+                        measurement := raylib.MeasureTextEx(
+                            font     = font,
+                            text     = message,
+                            fontSize = BUBBLE_DIALOG_FONT_SIZE,
+                            spacing  = 0,
+                        )
+
+                        bubble_rectangle := raylib.Rectangle {
+                            x      = x - BUBBLE_DIALOG_PADDING / 2,
+                            y      = y - BUBBLE_DIALOG_PADDING * 3 - measurement.y,
+                            width  = measurement.x + BUBBLE_DIALOG_PADDING * 2,
+                            height = measurement.y + BUBBLE_DIALOG_PADDING * 2,
+                        }
+
+                        vertices := [?][2]f32 {
+                            { x, bubble_rectangle.y + bubble_rectangle.height },
+                            { x, y },
+                            { x + (x - bubble_rectangle.x) * 2, bubble_rectangle.y + bubble_rectangle.height },
+                        }
+
+                        raylib.DrawRectangleRoundedLinesEx(
+                            rec       = bubble_rectangle,
+                            roundness = BUBBLE_DIALOG_ROUNDNESS,
+                            segments  = 0,
+                            lineThick = BUBBLE_DIALOG_OUTLINE,
+                            color     = raylib.BLACK,
+                        )
+
+                        raylib.DrawTriangle(
+                            v1       = vertices[0],
+                            v2       = vertices[1],
+                            v3       = vertices[2],
+                            color    = raylib.LIGHTGRAY,
+                        )
+
+                        raylib.DrawLineEx(
+                            startPos = vertices[0],
+                            endPos   = vertices[1],
+                            thick    = BUBBLE_DIALOG_OUTLINE,
+                            color    = raylib.BLACK,
+                        )
+
+                        raylib.DrawLineEx(
+                            startPos = vertices[1],
+                            endPos   = vertices[2],
+                            thick    = BUBBLE_DIALOG_OUTLINE,
+                            color    = raylib.BLACK,
+                        )
+
+                        raylib.DrawRectangleRounded(
+                            rec       = bubble_rectangle,
+                            roundness = BUBBLE_DIALOG_ROUNDNESS,
+                            segments  = 0,
+                            color     = raylib.LIGHTGRAY,
+                        )
+
+                        raylib.DrawTextEx(
+                            font     = font,
+                            text     = message,
+                            position = {
+                                bubble_rectangle.x + BUBBLE_DIALOG_PADDING,
+                                bubble_rectangle.y + BUBBLE_DIALOG_PADDING,
+                            },
+                            fontSize = BUBBLE_DIALOG_FONT_SIZE,
+                            spacing  = 0,
+                            tint     = raylib.BLACK,
+                        )
+
+                    }
+
+                }
+
+            }
+
+
+
+            ////////////////////////////////////////
+            //
+            // Render easel canvas.
+            //
+
+            if mode == .Easel {
+
+
+
+                // TODO.
+
+                raylib.DrawTexturePro(
+                    texture = easel_canvas_texture,
+                    source  = {
+                        0.0,
+                        0.0,
+                        cast(f32) easel_canvas_texture.width,
+                        cast(f32) easel_canvas_texture.height,
+                    },
+                    dest     = easel_canvas_dest,
+                    origin   = easel_canvas_origin,
+                    rotation = 0.0,
                     tint     = raylib.WHITE,
                 )
 
-                if easel_lockpad_hover_animation.value == 1 {
 
-                    x       := f32(rolypoly_dest.x + rolypoly_dest.width  * 0.75)
-                    y       := f32(rolypoly_dest.y + rolypoly_dest.height * 0.10)
-                    message := fmt.ctprintf("I need {} pets...", easel_cost)
 
-                    BUBBLE_DIALOG_FONT_SIZE :: 20
-                    BUBBLE_DIALOG_PADDING   :: 15
-                    BUBBLE_DIALOG_ROUNDNESS :: 0.3
-                    BUBBLE_DIALOG_OUTLINE   :: 4
+                // TODO.
 
-                    text_width  := f32(raylib.MeasureText(message, BUBBLE_DIALOG_FONT_SIZE))
-                    text_height := f32(BUBBLE_DIALOG_FONT_SIZE)
+                if hovered_easel_canvas_cell_is_within {
 
-                    bubble_rectangle := raylib.Rectangle {
-                        x      = x - BUBBLE_DIALOG_PADDING / 2,
-                        y      = y - BUBBLE_DIALOG_PADDING * 3 - text_height,
-                        width  = text_width  + BUBBLE_DIALOG_PADDING * 2,
-                        height = text_height + BUBBLE_DIALOG_PADDING * 2,
-                    }
-
-                    vertices := [?][2]f32 {
-                        { x, bubble_rectangle.y + bubble_rectangle.height },
-                        { x, y },
-                        { x + (x - bubble_rectangle.x) * 2, bubble_rectangle.y + bubble_rectangle.height },
-                    }
-
-                    raylib.DrawRectangleRoundedLinesEx(
-                        rec       = bubble_rectangle,
-                        roundness = BUBBLE_DIALOG_ROUNDNESS,
-                        segments  = 0,
-                        lineThick = BUBBLE_DIALOG_OUTLINE,
-                        color     = raylib.BLACK,
+                    raylib.DrawRectangleLines(
+                        posX   = cast(i32) (easel_canvas_dest.x - easel_canvas_origin.x + cast(f32) hovered_easel_canvas_cell_coordinate_x * easel_canvas_cell_dimensions.x),
+                        posY   = cast(i32) (easel_canvas_dest.y - easel_canvas_origin.y + cast(f32) hovered_easel_canvas_cell_coordinate_y * easel_canvas_cell_dimensions.y),
+                        width  = cast(i32) easel_canvas_cell_dimensions.x,
+                        height = cast(i32) easel_canvas_cell_dimensions.y,
+                        color  = raylib.BLACK,
                     )
 
-                    raylib.DrawTriangle(
-                        v1       = vertices[0],
-                        v2       = vertices[1],
-                        v3       = vertices[2],
-                        color    = raylib.LIGHTGRAY,
-                    )
+                }
 
-                    raylib.DrawLineEx(
-                        startPos = vertices[0],
-                        endPos   = vertices[1],
-                        thick    = BUBBLE_DIALOG_OUTLINE,
-                        color    = raylib.BLACK,
-                    )
 
-                    raylib.DrawLineEx(
-                        startPos = vertices[1],
-                        endPos   = vertices[2],
-                        thick    = BUBBLE_DIALOG_OUTLINE,
-                        color    = raylib.BLACK,
-                    )
 
-                    raylib.DrawRectangleRounded(
-                        rec       = bubble_rectangle,
-                        roundness = BUBBLE_DIALOG_ROUNDNESS,
-                        segments  = 0,
-                        color     = raylib.LIGHTGRAY,
-                    )
+                // TODO.
 
-                    raylib.DrawText(
-                        message,
-                        i32(bubble_rectangle.x + BUBBLE_DIALOG_PADDING),
-                        i32(bubble_rectangle.y + BUBBLE_DIALOG_PADDING),
-                        BUBBLE_DIALOG_FONT_SIZE,
-                        raylib.BLACK
+                {
+
+                    raylib.DrawTexturePro(
+                        texture  = submit_texture,
+                        source   = { 0.0, 0.0, cast(f32) submit_texture.width, cast(f32) submit_texture.height },
+                        dest     = submit_button_dest,
+                        origin   = submit_button_origin,
+                        rotation = 0.0,
+                        tint     = raylib.GREEN if hovering_submit_button else raylib.WHITE,
                     )
 
                 }
@@ -709,7 +755,7 @@ main :: proc() {
             // Render cursor.
             //
 
-            if mode == .Drawing {
+            if mode == .Easel {
 
                 cursor_dest := raylib.Rectangle {
                     mouse_position.x + 4.0,
