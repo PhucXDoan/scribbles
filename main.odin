@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:strings"
 import "core:math"
 import "core:math/ease"
+import "core:math/rand"
 import "core:reflect"
 import "core:os"
 import "core:mem"
@@ -170,9 +171,12 @@ main :: proc() {
         Padlock,
     }
 
+    GLOBAL_ASSET_SOUND_XYLO_COUNT :: 3
     Global_Asset_Sound_Handle :: enum u32 {
         nil,
-        Xylo,
+        Xylo_0,
+        Xylo_1,
+        Xylo_2,
         Padlock,
         Padlock_Locked,
         Padlock_Unlocked,
@@ -633,12 +637,17 @@ main :: proc() {
 
                 control_animation(&rolypoly_animation, .Restart)
 
-                raylib.PlaySound(global_asset_sounds[.Xylo])
+                xylo_sound_handle := Global_Asset_Sound_Handle(
+                    i32(Global_Asset_Sound_Handle.Xylo_0) +
+                    rand.int31_max(GLOBAL_ASSET_SOUND_XYLO_COUNT)
+                )
 
                 raylib.SetSoundVolume(
-                    global_asset_sounds[.Xylo],
+                    global_asset_sounds[xylo_sound_handle],
                     min(max(cast(f32) raylib.GetTime() - time_since_last_click, 0.0), 1.0)
                 )
+
+                raylib.PlaySound(global_asset_sounds[xylo_sound_handle])
 
                 time_since_last_click = cast(f32) raylib.GetTime()
 
