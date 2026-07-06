@@ -50,8 +50,11 @@ main :: proc() {
     rolypoly_image := raylib.LoadImage("./media/rolypoly.png")
     defer raylib.UnloadImage(rolypoly_image)
 
-    sound := raylib.LoadSound("./media/xylo.wav")
-    defer raylib.UnloadSound(sound)
+    xylo_sound := raylib.LoadSound("./media/xylo.wav")
+    defer raylib.UnloadSound(xylo_sound)
+
+    padlock_sound := raylib.LoadSound("./media/padlock.wav")
+    defer raylib.UnloadSound(padlock_sound)
 
     rolypoly_texture := raylib.LoadTextureFromImage(rolypoly_image)
     defer raylib.UnloadTexture(rolypoly_texture)
@@ -75,14 +78,111 @@ main :: proc() {
         }
     }
 
+    easel_texture := raylib.LoadTexture("./media/easel.png")
+    defer raylib.UnloadTexture(easel_texture)
+
+    padlock_texture := raylib.LoadTexture("./media/padlock.png")
+    defer raylib.UnloadTexture(padlock_texture)
+
+
+
+    ////////////////////////////////////////////////////////////////////////////////
+    //
+    // Animation.
+    //
+
+    Animation :: struct {
+        duration : f32,
+        value    : f32,
+        running  : bool,
+        control  : Animation_Control,
+    }
+
+    Animation_Control :: enum {
+        Restart,
+        Decrease,
+        Increase,
+    }
+
+    update_animation :: proc(animation : ^Animation) {
+
+        if animation.running {
+
+            switch animation.control {
+
+                case .Restart: {
+
+                    animation.value += raylib.GetFrameTime() / animation.duration
+
+                    if animation.value > 1 {
+                        animation.value   = 0
+                        animation.running = false
+                    }
+
+                }
+
+                case .Decrease: {
+                    animation.value -= raylib.GetFrameTime() / animation.duration
+                    animation.value  = clamp(animation.value, 0, 1)
+                }
+
+                case .Increase: {
+                    animation.value += raylib.GetFrameTime() / animation.duration
+                    animation.value  = clamp(animation.value, 0, 1)
+                }
+
+                case: panic("Invalid.")
+
+            }
+
+        }
+
+    }
+
+    control_animation :: proc(animation : ^Animation, control : Animation_Control) {
+
+        animation.control = control
+
+        switch control {
+
+            case .Restart: {
+                animation.value   = 0
+                animation.running = true
+            }
+
+            case .Decrease: {
+                animation.running = true
+            }
+
+            case .Increase: {
+                animation.running = true
+            }
+
+            case: panic("Invalid.")
+
+        }
+
+    }
+
+    ease_animation :: proc(
+        start     : f32,
+        end       : f32,
+        animation : Animation,
+        easing    : ease.Ease = .Linear,
+    ) -> f32 {
+        return math.lerp(
+            start,
+            end,
+            ease.ease(easing, animation.value)
+        )
+    }
+
 
 
     ////////////////////////////////////////////////////////////////////////////////
     //
     // Screen Buttons.
     //
-
-
 
     SCREEN_BUTTON_FONT_SIZE :: 30
 
@@ -142,12 +242,13 @@ main :: proc() {
     }
 
     mode                  := Mode.Main
-    rolypoly_animating    := false
-    rolypoly_animation_t  := cast(f32) 0.0
     time_since_last_click := cast(f32) 0.0
     friend_animation_t    := cast(f32) 0.0
     friend_x              := cast(f32) 100.0
-    points                := 0
+    pets                  := 0
+
+    rolypoly_animation    := Animation { duration = 0.25 }
+    easel_hover_animation := Animation { duration = 0.2 }
 
     for !raylib.WindowShouldClose() {
 
@@ -189,15 +290,14 @@ main :: proc() {
 
                 if is_hovering && raylib.IsMouseButtonPressed(.LEFT) {
 
-                    points += 1
+                    pets += 1
 
-                    rolypoly_animating   = true
-                    rolypoly_animation_t = 0.0
+                    control_animation(&rolypoly_animation, .Restart)
 
-                    raylib.PlaySound(sound)
+                    raylib.PlaySound(xylo_sound)
 
                     raylib.SetSoundVolume(
-                        sound,
+                        xylo_sound,
                         min(max(cast(f32) raylib.GetTime() - time_since_last_click, 0.0), 1.0)
                     )
 
@@ -206,16 +306,7 @@ main :: proc() {
                 }
 
 
-                if rolypoly_animating {
-
-                    rolypoly_animation_t += raylib.GetFrameTime() / 0.25
-
-                    if rolypoly_animation_t > 1.0 {
-                        rolypoly_animation_t = 0.0
-                        rolypoly_animating   = false
-                    }
-
-                }
+                update_animation(&rolypoly_animation)
 
             }
 
@@ -226,7 +317,111 @@ main :: proc() {
 
 
 
+        ////////////////////////////////////////
+        //
+        // Update screen buttons.
+        //
+
+        for &screen_button, screen_button_i in screen_buttons {
+
+            hovering_screen_button := raylib.CheckCollisionPointRec(
+                mouse_position,
+                {
+                    screen_button.center_x - screen_button.base_box_width  / 2,
+                    screen_button.center_y - screen_button.base_box_height / 2,
+                    screen_button.base_box_width,
+                    screen_button.base_box_height,
+                }
+            )
+
+            if hovering_screen_button {
+                screen_button.hover_t += raylib.GetFrameTime() / 0.1
+            } else {
+                screen_button.hover_t -= raylib.GetFrameTime() / 0.1
+            }
+
+            screen_button.hover_t = clamp(screen_button.hover_t, 0, 1)
+
+            if hovering_screen_button && raylib.IsMouseButtonPressed(.LEFT) {
+
+                screen_button.hover_t = 0
+
+                switch screen_button_i {
+
+                    case .Roly: {
+                        mode = .Main
+                    }
+
+                    case .Draw: {
+                        mode = .Drawing
+                    }
+
+                    case .Shop: {
+                        fmt.printf("TODO\n")
+                    }
+
+                    case: panic("Invalid")
+
+                }
+
+            }
+
+        }
+
+
+
+        ////////////////////////////////////////
+        //
+        // Update easel.
+        //
+
+        easel_dest := raylib.Rectangle {
+            f32(raylib.GetScreenWidth())  * 0.8,
+            f32(raylib.GetScreenHeight()) * 0.6,
+            100,
+            200,
+        }
+
+        easel_origin := raylib.Vector2 {
+            easel_dest.width / 2,
+            easel_dest.height,
+        }
+
+        hovering_easel := raylib.CheckCollisionPointRec(
+            mouse_position,
+            {
+                easel_dest.x - easel_origin.x,
+                easel_dest.y - easel_origin.y,
+                easel_dest.width,
+                easel_dest.height,
+            }
+        )
+
+        if hovering_easel {
+            control_animation(&easel_hover_animation, .Increase)
+
+        } else {
+            control_animation(&easel_hover_animation, .Decrease)
+        }
+
+        old_easel_hover_animation_value := easel_hover_animation.value
+
+        update_animation(&easel_hover_animation)
+
+        if (
+            old_easel_hover_animation_value <  0.25 &&
+            easel_hover_animation.value     >= 0.25 &&
+            !raylib.IsSoundPlaying(padlock_sound)
+        ) {
+            raylib.PlaySound(padlock_sound)
+        }
+
+
+
+        ////////////////////////////////////////
+        //
         // Render.
+        //
 
         {
 
@@ -239,74 +434,10 @@ main :: proc() {
 
             ////////////////////////////////////////
             //
-            // Update screen buttons.
-            //
-
-            for &screen_button, screen_button_i in screen_buttons {
-
-                hovering_screen_button := raylib.CheckCollisionPointRec(
-                    mouse_position,
-                    {
-                        screen_button.center_x - screen_button.base_box_width  / 2,
-                        screen_button.center_y - screen_button.base_box_height / 2,
-                        screen_button.base_box_width,
-                        screen_button.base_box_height,
-                    }
-                )
-
-                if hovering_screen_button {
-                    screen_button.hover_t += raylib.GetFrameTime() / 0.1
-                } else {
-                    screen_button.hover_t -= raylib.GetFrameTime() / 0.1
-                }
-
-                screen_button.hover_t = clamp(screen_button.hover_t, 0, 1)
-
-                if hovering_screen_button && raylib.IsMouseButtonPressed(.LEFT) {
-
-                    screen_button.hover_t = 0
-
-                    switch screen_button_i {
-
-                        case .Roly: {
-                            mode = .Main
-                        }
-
-                        case .Draw: {
-                            mode = .Drawing
-                        }
-
-                        case .Shop: {
-                            fmt.printf("TODO\n")
-                        }
-
-                        case: panic("Invalid")
-
-                    }
-
-                }
-
-            }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-            ////////////////////////////////////////
-            //
             // TODO.
             //
 
-            text := fmt.ctprintf("Points: {}", points)
+            text := fmt.ctprintf("Pets: {}", pets)
             raylib.DrawText(
                 text,
                 10,
@@ -320,13 +451,13 @@ main :: proc() {
 
                 case .Main: {
 
-                    k := 1 + 0.05 * (1 - math.sin(math.PI / 2 * rolypoly_animation_t))
+                    k := 1 + 0.05 * (1 - math.sin(math.PI / 2 * rolypoly_animation.value))
 
                     dest := raylib.Rectangle {
                         0.0,
                         0.0,
-                        cast(f32) rolypoly_texture.width  / (k if rolypoly_animating else 1.0),
-                        cast(f32) rolypoly_texture.height * (k if rolypoly_animating else 1.0),
+                        cast(f32) rolypoly_texture.width  / (k if rolypoly_animation.running else 1.0),
+                        cast(f32) rolypoly_texture.height * (k if rolypoly_animation.running else 1.0),
                     }
 
                     dest.x = cast(f32) raylib.GetScreenWidth()  / 2.0 - dest.width  / 2.0
@@ -521,6 +652,38 @@ main :: proc() {
 
             ////////////////////////////////////////
             //
+            // Render easel.
+            //
+
+            raylib.DrawTexturePro(
+                texture  = easel_texture,
+                source   = { 0, 0, cast(f32) easel_texture.width, cast(f32) easel_texture.height },
+                dest     = easel_dest,
+                origin   = easel_origin,
+                rotation = 0,
+                tint     = raylib.GRAY,
+            )
+
+            easel_padlock_dest := raylib.Rectangle {
+                easel_dest.x,
+                easel_dest.y - easel_dest.height / 2,
+                ease_animation(75, 100, easel_hover_animation, .Bounce_Out),
+                ease_animation(75, 100, easel_hover_animation, .Bounce_Out),
+            }
+
+            raylib.DrawTexturePro(
+                texture  = padlock_texture,
+                source   = { 0, 0, cast(f32) padlock_texture.width, cast(f32) padlock_texture.height },
+                dest     = easel_padlock_dest,
+                origin   = { f32(easel_padlock_dest.width) / 2, f32(easel_padlock_dest.height) / 2 },
+                rotation = math.sin(ease_animation(0, 6, easel_hover_animation, .Cubic_Out)) * 10,
+                tint     = raylib.WHITE,
+            )
+
+
+
+            ////////////////////////////////////////
+            //
             // Render screen buttons.
             //
 
@@ -561,7 +724,7 @@ main :: proc() {
 
             if mode == .Drawing {
 
-                dest := raylib.Rectangle {
+                cursor_dest := raylib.Rectangle {
                     mouse_position.x + 4.0,
                     mouse_position.y + 10.0,
                     cast(f32) cursor_texture.width,
@@ -571,8 +734,8 @@ main :: proc() {
                 raylib.DrawTexturePro(
                     texture  = cursor_texture,
                     source   = { 0.0, 0.0, cast(f32) cursor_texture.width, cast(f32) cursor_texture.height },
-                    dest     = dest,
-                    origin   = { dest.width / 2.0, dest.height / 2.0 },
+                    dest     = cursor_dest,
+                    origin   = { cursor_dest.width / 2.0, cursor_dest.height / 2.0 },
                     rotation = 150.0 if raylib.IsMouseButtonDown(.LEFT) else 160.0,
                     tint     = raylib.WHITE,
                 )
