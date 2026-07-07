@@ -806,21 +806,96 @@ main :: proc() {
 
     ////////////////////////////////////////////////////////////////////////////////
     //
-    // Main loop.
+    // Entities.
     //
 
-    Mode :: enum {
-        Normal,
+    Main_Entity_Kind :: enum {
+        nil,
+        Rolypoly,
         Easel,
     }
 
-    mode                          := Mode.Normal
-    time_since_last_click         := cast(f32) 0.0
+    Main_Entity :: struct {
+
+        kind                  : Main_Entity_Kind,
+        position              : raylib.Vector2,
+        origin                : raylib.Vector2,
+        base_dimensions       : raylib.Vector2,
+        texture_handle        : Global_Asset_Texture_Handle,
+        mouse_hover_animation : Animation,
+        lock_hover_animation  : Animation,
+        mouse_click_animation : Animation,
+        locked                : bool,
+
+        mouse_hovering        : bool,
+        mouse_clicked         : bool,
+
+        rendering_dimensions  : raylib.Vector2,
+
+    }
+
+    Dialogue_Bubble :: struct {
+        position    : raylib.Vector2,
+        message     : cstring,
+        font_handle : Global_Asset_Font_Handle,
+    }
+
+
+
+    ////////////////////////////////////////////////////////////////////////////////
+    //
+    // Main loop.
+    //
+
+    entities := [?]Main_Entity {
+
+        Main_Entity_Kind.nil = {},
+
+        Main_Entity_Kind.Rolypoly = {
+            kind     = .Rolypoly,
+            position = {
+                cast(f32) raylib.GetScreenWidth()  * 0.5,
+                cast(f32) raylib.GetScreenHeight() * 0.5,
+            },
+            origin          = { 0.5, 0.5 },
+            base_dimensions = {
+                75,
+                50,
+            },
+            texture_handle        = .Rolypoly,
+            mouse_hover_animation = { duration = 0.1  },
+            lock_hover_animation  = {},
+            mouse_click_animation = { duration = 0.25 },
+        },
+
+        Main_Entity_Kind.Easel = {
+            kind     = .Easel,
+            position = {
+                cast(f32) raylib.GetScreenWidth()  * 0.85,
+                cast(f32) raylib.GetScreenHeight() * 0.6,
+            },
+            origin          = { 0.5, 1 },
+            base_dimensions = {
+                100,
+                200,
+            },
+            texture_handle        = .Easel,
+            mouse_hover_animation = { duration = 0.1 },
+            lock_hover_animation  = { duration = 0.1 },
+            mouse_click_animation = { duration = 0.1 },
+            locked                = !game_state.easel_unlocked,
+        },
+
+    }
+
+    Mode :: enum {
+        Main,
+        Easel,
+    }
+
+    mode                          := Mode.Main
     friend_animation              := Animation { duration = 1 }
     friend_x                      := cast(f32) 100.0
-    rolypoly_animation            := Animation { duration = 0.25 }
-    easel_hover_animation         := Animation { duration = 0.20 }
-    easel_lockpad_click_animation := Animation { duration = 0.10 }
 
 
 
@@ -878,152 +953,197 @@ main :: proc() {
 
         mouse_position := raylib.GetMousePosition()
 
+        dialogue_bubbles : [dynamic; 32]Dialogue_Bubble
+
 
 
         ////////////////////////////////////////////////////////////////////////////////
         //
-        // Update Rolypoly.
+        // Update entities.
         //
 
-        rolypoly_dest := raylib.Rectangle {
-            0,
-            0,
-            200,
-            150,
-        }
+        for &entity in entities {
 
-        if rolypoly_animation.running {
-            rolypoly_dest.width  /= ease_animation(1.2, 1, rolypoly_animation, .Quartic_Out)
-            rolypoly_dest.height *= ease_animation(1.2, 1, rolypoly_animation, .Cubic_Out)
-        }
 
-        rolypoly_dest.x = cast(f32) raylib.GetScreenWidth()  / 2.0 - rolypoly_dest.width  / 2.0
-        rolypoly_dest.y = cast(f32) raylib.GetScreenHeight() / 2.0 - rolypoly_dest.height / 2.0
 
-        hovering_rolypoly := false
+            // Handle mouse hovering.
 
-        if mode == .Normal {
-
-            hovering_rolypoly = raylib.CheckCollisionPointRec(
-                mouse_position,
-                rolypoly_dest,
+            entity.mouse_hovering = (
+                mode == .Main &&
+                raylib.CheckCollisionPointRec(
+                    raylib.GetMousePosition(),
+                    {
+                        entity.position.x - entity.rendering_dimensions.x * entity.origin.x,
+                        entity.position.y - entity.rendering_dimensions.y * entity.origin.y,
+                        entity.rendering_dimensions.x,
+                        entity.rendering_dimensions.y,
+                    },
+                )
             )
 
-            if hovering_rolypoly && raylib.IsMouseButtonPressed(.LEFT) {
+            control_animation(
+                &entity.mouse_hover_animation,
+                .Increase if entity.mouse_hovering else .Decrease
+            )
 
-                game_state.pets += 1
+            update_animation(&entity.mouse_hover_animation)
 
-                control_animation(&rolypoly_animation, .Restart)
+            if entity.locked {
 
-                xylo_sound_handle := Global_Asset_Sound_Handle(
-                    i32(Global_Asset_Sound_Handle.Xylo_0) +
-                    rand.int31_max(GLOBAL_ASSET_SOUND_XYLO_COUNT)
+                control_animation(
+                    &entity.lock_hover_animation,
+                    .Increase if entity.mouse_hovering else .Decrease
                 )
 
-                raylib.SetSoundVolume(
-                    global_asset_sounds[xylo_sound_handle],
-                    min(max(cast(f32) raylib.GetTime() - time_since_last_click, 0.0), 1.0)
-                )
+                old_lock_hover_animation_value := entity.lock_hover_animation.value
 
-                raylib.PlaySound(global_asset_sounds[xylo_sound_handle])
+                update_animation(&entity.lock_hover_animation)
 
-                time_since_last_click = cast(f32) raylib.GetTime()
-
-            }
-
-        }
-
-        if hovering_rolypoly {
-            raylib.SetMouseCursor(raylib.MouseCursor.POINTING_HAND)
-        } else {
-            raylib.SetMouseCursor(raylib.MouseCursor.DEFAULT)
-        }
-
-        update_animation(&rolypoly_animation)
-
-
-
-        ////////////////////////////////////////////////////////////////////////////////
-        //
-        // Update easel.
-        //
-
-        easel_dest := raylib.Rectangle {
-            f32(raylib.GetScreenWidth())  * 0.8,
-            f32(raylib.GetScreenHeight()) * 0.6,
-            100,
-            200,
-        }
-
-        if game_state.easel_unlocked {
-            easel_dest.width  *= ease_animation(1.0, 1.025, easel_hover_animation, .Cubic_Out)
-            easel_dest.height *= ease_animation(1.0, 1.025, easel_hover_animation, .Cubic_Out)
-        }
-
-        easel_origin := raylib.Vector2 {
-            easel_dest.width / 2,
-            easel_dest.height,
-        }
-
-        hovering_easel := raylib.CheckCollisionPointRec(
-            mouse_position,
-            {
-                easel_dest.x - easel_origin.x,
-                easel_dest.y - easel_origin.y,
-                easel_dest.width,
-                easel_dest.height,
-            }
-        )
-
-        if hovering_easel {
-            control_animation(&easel_hover_animation, .Increase)
-        } else {
-            control_animation(&easel_hover_animation, .Decrease)
-        }
-
-        old_easel_hover_animation_value := easel_hover_animation.value
-
-        update_animation(&easel_hover_animation)
-
-
-
-        if game_state.easel_unlocked {
-
-            if hovering_easel && raylib.IsMouseButtonPressed(.LEFT) {
-
-                mode = .Easel
-                raylib.PlaySound(global_asset_sounds[.Easel_Open])
+                if (
+                    old_lock_hover_animation_value    <  0.5 &&
+                    entity.lock_hover_animation.value >= 0.5 &&
+                    !raylib.IsSoundPlaying(global_asset_sounds[.Padlock])
+                ) {
+                    raylib.PlaySound(global_asset_sounds[.Padlock])
+                }
 
             }
 
-        } else {
+            #partial switch entity.kind {
 
-            if (
-                old_easel_hover_animation_value <  0.5 &&
-                easel_hover_animation.value     >= 0.5 &&
-                !raylib.IsSoundPlaying(global_asset_sounds[.Padlock])
-            ) {
-                raylib.PlaySound(global_asset_sounds[.Padlock])
-            }
+                case .Rolypoly: {
 
-            if easel_hover_animation.value == 1 && raylib.IsMouseButtonPressed(.LEFT) {
+                    raylib.SetMouseCursor(
+                        raylib.MouseCursor.POINTING_HAND if entity.mouse_hovering else raylib.MouseCursor.DEFAULT
+                    )
 
-                if game_state.pets < u128(EASEL_COST) {
+                }
 
-                    control_animation(&easel_lockpad_click_animation, .Restart)
-                    raylib.PlaySound(global_asset_sounds[.Padlock_Locked])
+                case .Easel: {
 
-                } else {
+                    if entity.locked && entity.mouse_hover_animation.value == 1 {
 
-                    game_state.pets           -= u128(EASEL_COST)
-                    game_state.easel_unlocked  = true
-                    raylib.PlaySound(global_asset_sounds[.Padlock_Unlocked])
+                        append(
+                            &dialogue_bubbles,
+                            Dialogue_Bubble {
+                                position = {
+                                    entities[Main_Entity_Kind.Rolypoly].position.x + entities[Main_Entity_Kind.Rolypoly].rendering_dimensions.x * 0.25,
+                                    entities[Main_Entity_Kind.Rolypoly].position.y - entities[Main_Entity_Kind.Rolypoly].rendering_dimensions.y * 0.25,
+                                },
+                                message = (
+                                    game_state.pets < EASEL_COST
+                                        ? fmt.ctprintf("I need {} pets...", EASEL_COST)
+                                        : fmt.ctprintf("Unlock for {} pets...?", EASEL_COST)
+                                ),
+                                font_handle = .Sniglet,
+                            }
+                        )
+
+                    }
 
                 }
 
             }
 
-            update_animation(&easel_lockpad_click_animation)
+
+
+            // Handle mouse clicking.
+
+            entity.mouse_clicked = (
+                mode == .Main &&
+                entity.mouse_hovering && raylib.IsMouseButtonPressed(.LEFT)
+            )
+
+            if entity.mouse_clicked {
+                control_animation(&entity.mouse_click_animation, .Restart)
+            }
+
+            update_animation(&entity.mouse_click_animation)
+
+            if entity.mouse_clicked {
+
+                if !entity.locked {
+
+                    #partial switch entity.kind {
+
+                        case .Rolypoly: {
+
+                            game_state.pets += 1
+                            control_animation(&entity.mouse_click_animation, .Restart)
+
+                            @(static) time_since_last_click := f32(0)
+
+                            xylo_sound_handle := Global_Asset_Sound_Handle(
+                                i32(Global_Asset_Sound_Handle.Xylo_0) +
+                                rand.int31_max(GLOBAL_ASSET_SOUND_XYLO_COUNT)
+                            )
+
+                            raylib.SetSoundVolume(
+                                global_asset_sounds[xylo_sound_handle],
+                                min(max(f32(raylib.GetTime()) - time_since_last_click, 0), 1)
+                            )
+
+                            raylib.PlaySound(global_asset_sounds[xylo_sound_handle])
+
+                            time_since_last_click = f32(raylib.GetTime())
+
+                        }
+
+                        case .Easel: {
+
+                            mode = .Easel
+                            raylib.PlaySound(global_asset_sounds[.Easel_Open])
+
+                        }
+
+                    }
+
+                } else if entity.lock_hover_animation.value == 1 { // To make sure user hover over lock for long enough...
+
+                    #partial switch entity.kind {
+
+                        case .Easel: {
+
+                            if game_state.pets >= EASEL_COST {
+
+                                game_state.pets           -= EASEL_COST
+                                game_state.easel_unlocked  = true
+                                entity.locked              = false
+
+                                raylib.PlaySound(global_asset_sounds[.Padlock_Unlocked])
+
+                            }
+
+                        }
+
+                    }
+
+                    if entity.locked {
+                        control_animation(&entity.lock_hover_animation, .Restart)
+                        raylib.PlaySound(global_asset_sounds[.Padlock_Locked])
+                    }
+
+                }
+
+            }
+
+
+
+            // Determine rendering dimensions.
+
+            entity.rendering_dimensions = entity.base_dimensions
+
+            if !entity.locked {
+
+                entity.rendering_dimensions.x *= ease_animation(1, 1.025, entity.mouse_hover_animation, .Cubic_Out)
+                entity.rendering_dimensions.y *= ease_animation(1, 1.025, entity.mouse_hover_animation, .Cubic_Out)
+
+                if entity.mouse_click_animation.running {
+                    entity.rendering_dimensions.x /= ease_animation(1.2, 1, entity.mouse_click_animation, .Quartic_Out)
+                    entity.rendering_dimensions.y *= ease_animation(1.2, 1, entity.mouse_click_animation, .Cubic_Out  )
+                }
+
+            }
 
         }
 
@@ -1083,7 +1203,7 @@ main :: proc() {
         update_button(&easel_canvas_back_button)
 
         if easel_canvas_back_button.pressed || (mode == .Easel && raylib.IsKeyPressed(.ESCAPE)) {
-            mode = .Normal
+            mode = .Main
             raylib.PlaySound(global_asset_sounds[.Easel_Close])
         }
 
@@ -1132,7 +1252,7 @@ main :: proc() {
 
             raylib.ImageClearBackground(&easel_canvas_image, EASEL_DEFAULT_COLOR)
 
-            mode = .Normal
+            mode = .Main
             raylib.PlaySound(global_asset_sounds[.Easel_Close])
 
         }
@@ -1171,19 +1291,67 @@ main :: proc() {
 
             ////////////////////////////////////////////////////////////////////////////////
             //
-            // Render Rolypoly.
+            // Render entities.
             //
 
-            if mode == .Normal {
+            if mode == .Main {
 
-                raylib.DrawTexturePro(
-                    texture  = global_asset_textures[.Rolypoly],
-                    source   = { 0.0, 0.0, cast(f32) global_asset_textures[.Rolypoly].width, cast(f32) global_asset_textures[.Rolypoly].height },
-                    dest     = rolypoly_dest,
-                    origin   = { 0.0, 0.0 },
-                    rotation = 0.0,
-                    tint     = raylib.WHITE,
-                )
+                for entity in entities {
+
+                    raylib.DrawTexturePro(
+                        texture = global_asset_textures[entity.texture_handle],
+                        source  = {
+                            0,
+                            0,
+                            cast(f32) global_asset_textures[entity.texture_handle].width,
+                            cast(f32) global_asset_textures[entity.texture_handle].height,
+                        },
+                        dest = {
+                            entity.position.x,
+                            entity.position.y,
+                            entity.rendering_dimensions.x,
+                            entity.rendering_dimensions.y,
+                        },
+                        origin = {
+                            entity.rendering_dimensions.x * entity.origin.x,
+                            entity.rendering_dimensions.y * entity.origin.y,
+                        },
+                        rotation = 0,
+                        tint     = raylib.GRAY if entity.locked else raylib.WHITE,
+                    )
+
+                    if entity.locked {
+
+                        dest := raylib.Rectangle {
+                            entity.position.x - entity.rendering_dimensions.x * (entity.origin.x - 0.5),
+                            entity.position.y - entity.rendering_dimensions.y * (entity.origin.y - 0.5),
+                            ease_animation(75, 100, entity.lock_hover_animation, .Bounce_Out),
+                            ease_animation(75, 100, entity.lock_hover_animation, .Bounce_Out),
+                        }
+
+                        raylib.DrawTexturePro(
+                            texture = global_asset_textures[.Padlock],
+                            source  = {
+                                0,
+                                0,
+                                f32(global_asset_textures[.Padlock].width ),
+                                f32(global_asset_textures[.Padlock].height),
+                            },
+                            dest   = dest,
+                            origin = {
+                                dest.width  / 2,
+                                dest.height / 2,
+                            },
+                            rotation = (
+                                math.sin(ease_animation(0, 6, entity.lock_hover_animation, .Cubic_Out)) * 10 +
+                                math.sin(ease_animation(0, 6, entity.mouse_click_animation, .Cubic_Out)) * 10
+                            ),
+                            tint = raylib.WHITE,
+                        )
+
+                    }
+
+                }
 
             }
 
@@ -1191,127 +1359,83 @@ main :: proc() {
 
             ////////////////////////////////////////////////////////////////////////////////
             //
-            // Render easel.
+            // Render dialogue bubbles.
             //
 
-            if mode == .Normal {
+            for dialogue_bubble in dialogue_bubbles {
 
-                raylib.DrawTexturePro(
-                    texture  = global_asset_textures[.Easel],
-                    source   = { 0, 0, cast(f32) global_asset_textures[.Easel].width, cast(f32) global_asset_textures[.Easel].height },
-                    dest     = easel_dest,
-                    origin   = easel_origin,
-                    rotation = 0,
-                    tint     = raylib.WHITE if game_state.easel_unlocked else raylib.GRAY,
+                DIALOGUE_BUBBLE_FONT_SIZE :: 30
+                DIALOGUE_BUBBLE_PADDING   :: 15
+                DIALOGUE_BUBBLE_ROUNDNESS :: 0.3
+                DIALOGUE_BUBBLE_OUTLINE   :: 4
+
+                measurement := raylib.MeasureTextEx(
+                    font     = global_asset_fonts[dialogue_bubble.font_handle],
+                    text     = dialogue_bubble.message,
+                    fontSize = DIALOGUE_BUBBLE_FONT_SIZE,
+                    spacing  = 0,
                 )
 
-                if !game_state.easel_unlocked {
-
-                    easel_padlock_dest := raylib.Rectangle {
-                        easel_dest.x,
-                        easel_dest.y - easel_dest.height / 2,
-                        ease_animation(75, 100, easel_hover_animation, .Bounce_Out),
-                        ease_animation(75, 100, easel_hover_animation, .Bounce_Out),
-                    }
-
-                    easel_padlock_rotation := math.sin(ease_animation(0, 6, easel_hover_animation, .Cubic_Out)) * 10
-                    easel_padlock_rotation += math.sin(ease_animation(0, 6, easel_lockpad_click_animation, .Cubic_Out)) * 10
-
-                    raylib.DrawTexturePro(
-                        texture  = global_asset_textures[.Padlock],
-                        source   = { 0, 0, cast(f32) global_asset_textures[.Padlock].width, cast(f32) global_asset_textures[.Padlock].height },
-                        dest     = easel_padlock_dest,
-                        origin   = { f32(easel_padlock_dest.width) / 2, f32(easel_padlock_dest.height) / 2 },
-                        rotation = easel_padlock_rotation,
-                        tint     = raylib.WHITE,
-                    )
-
-                    if easel_hover_animation.value == 1 {
-
-                        x       := f32(rolypoly_dest.x + rolypoly_dest.width  * 0.75)
-                        y       := f32(rolypoly_dest.y + rolypoly_dest.height * 0.10)
-                        message := (
-                            game_state.pets < u128(EASEL_COST)
-                                ? fmt.ctprintf("I need {} pets...", EASEL_COST)
-                                : fmt.ctprintf("Unlock for {} pets...?", EASEL_COST)
-                        )
-
-                        BUBBLE_DIALOG_FONT_SIZE :: 30
-                        BUBBLE_DIALOG_PADDING   :: 15
-                        BUBBLE_DIALOG_ROUNDNESS :: 0.3
-                        BUBBLE_DIALOG_OUTLINE   :: 4
-
-                        measurement := raylib.MeasureTextEx(
-                            font     = global_asset_fonts[.Sniglet],
-                            text     = message,
-                            fontSize = BUBBLE_DIALOG_FONT_SIZE,
-                            spacing  = 0,
-                        )
-
-                        bubble_rectangle := raylib.Rectangle {
-                            x      = x - BUBBLE_DIALOG_PADDING / 2,
-                            y      = y - BUBBLE_DIALOG_PADDING * 3 - measurement.y,
-                            width  = measurement.x + BUBBLE_DIALOG_PADDING * 2,
-                            height = measurement.y + BUBBLE_DIALOG_PADDING * 2,
-                        }
-
-                        vertices := [?][2]f32 {
-                            { x, bubble_rectangle.y + bubble_rectangle.height },
-                            { x, y },
-                            { x + (x - bubble_rectangle.x) * 2, bubble_rectangle.y + bubble_rectangle.height },
-                        }
-
-                        raylib.DrawRectangleRoundedLinesEx(
-                            rec       = bubble_rectangle,
-                            roundness = BUBBLE_DIALOG_ROUNDNESS,
-                            segments  = 0,
-                            lineThick = BUBBLE_DIALOG_OUTLINE,
-                            color     = raylib.BLACK,
-                        )
-
-                        raylib.DrawTriangle(
-                            v1       = vertices[0],
-                            v2       = vertices[1],
-                            v3       = vertices[2],
-                            color    = raylib.LIGHTGRAY,
-                        )
-
-                        raylib.DrawLineEx(
-                            startPos = vertices[0],
-                            endPos   = vertices[1],
-                            thick    = BUBBLE_DIALOG_OUTLINE,
-                            color    = raylib.BLACK,
-                        )
-
-                        raylib.DrawLineEx(
-                            startPos = vertices[1],
-                            endPos   = vertices[2],
-                            thick    = BUBBLE_DIALOG_OUTLINE,
-                            color    = raylib.BLACK,
-                        )
-
-                        raylib.DrawRectangleRounded(
-                            rec       = bubble_rectangle,
-                            roundness = BUBBLE_DIALOG_ROUNDNESS,
-                            segments  = 0,
-                            color     = raylib.LIGHTGRAY,
-                        )
-
-                        raylib.DrawTextEx(
-                            font     = global_asset_fonts[.Sniglet],
-                            text     = message,
-                            position = {
-                                bubble_rectangle.x + BUBBLE_DIALOG_PADDING,
-                                bubble_rectangle.y + BUBBLE_DIALOG_PADDING,
-                            },
-                            fontSize = BUBBLE_DIALOG_FONT_SIZE,
-                            spacing  = 0,
-                            tint     = raylib.BLACK,
-                        )
-
-                    }
-
+                bubble_rec := raylib.Rectangle {
+                    dialogue_bubble.position.x - DIALOGUE_BUBBLE_PADDING / 2,
+                    dialogue_bubble.position.y - DIALOGUE_BUBBLE_PADDING * 3 - measurement.y,
+                    measurement.x + DIALOGUE_BUBBLE_PADDING * 2,
+                    measurement.y + DIALOGUE_BUBBLE_PADDING * 2,
                 }
+
+                vertices := [?][2]f32 {
+                    { dialogue_bubble.position.x, bubble_rec.y + bubble_rec.height },
+                    { dialogue_bubble.position.x, dialogue_bubble.position.y },
+                    { dialogue_bubble.position.x + (dialogue_bubble.position.x - bubble_rec.x) * 2, bubble_rec.y + bubble_rec.height },
+                }
+
+                raylib.DrawRectangleRoundedLinesEx(
+                    rec       = bubble_rec,
+                    roundness = DIALOGUE_BUBBLE_ROUNDNESS,
+                    segments  = 0,
+                    lineThick = DIALOGUE_BUBBLE_OUTLINE,
+                    color     = raylib.BLACK,
+                )
+
+                raylib.DrawTriangle(
+                    v1       = vertices[0],
+                    v2       = vertices[1],
+                    v3       = vertices[2],
+                    color    = raylib.LIGHTGRAY,
+                )
+
+                raylib.DrawLineEx(
+                    startPos = vertices[0],
+                    endPos   = vertices[1],
+                    thick    = DIALOGUE_BUBBLE_OUTLINE,
+                    color    = raylib.BLACK,
+                )
+
+                raylib.DrawLineEx(
+                    startPos = vertices[1],
+                    endPos   = vertices[2],
+                    thick    = DIALOGUE_BUBBLE_OUTLINE,
+                    color    = raylib.BLACK,
+                )
+
+                raylib.DrawRectangleRounded(
+                    rec       = bubble_rec,
+                    roundness = DIALOGUE_BUBBLE_ROUNDNESS,
+                    segments  = 0,
+                    color     = raylib.LIGHTGRAY,
+                )
+
+                raylib.DrawTextEx(
+                    font     = global_asset_fonts[dialogue_bubble.font_handle],
+                    text     = dialogue_bubble.message,
+                    position = {
+                        bubble_rec.x + DIALOGUE_BUBBLE_PADDING,
+                        bubble_rec.y + DIALOGUE_BUBBLE_PADDING,
+                    },
+                    fontSize = DIALOGUE_BUBBLE_FONT_SIZE,
+                    spacing  = 0,
+                    tint     = raylib.BLACK,
+                )
 
             }
 
@@ -1398,7 +1522,7 @@ main :: proc() {
 
             friend_x += raylib.GetFrameTime() * 10.0
 
-            if mode == .Normal {
+            if mode == .Main {
 
                 friend_dest := raylib.Rectangle {
                     friend_x,
