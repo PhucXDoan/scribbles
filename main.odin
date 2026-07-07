@@ -216,114 +216,58 @@ main :: proc() {
 
     when ODIN_DEBUG {{
 
-
-
-        // Set up global asset pack file.
-
         global_asset_pack_file_handle := os.open(GLOBAL_ASSET_PACK_FILE_PATH, os.O_CREATE | os.O_TRUNC | os.O_APPEND) or_else panic("Failed.")
         defer os.close(global_asset_pack_file_handle)
 
+        pack_asset_type(Global_Asset_Texture_Handle, Global_Asset_Pack_Texture_Header, global_asset_pack_file_handle)
+        pack_asset_type(Global_Asset_Sound_Handle  , Global_Asset_Pack_Sound_Header  , global_asset_pack_file_handle)
+        pack_asset_type(Global_Asset_Font_Handle   , Global_Asset_Pack_Font_Header   , global_asset_pack_file_handle)
 
+        pack_asset_type :: proc(
+            $Global_Asset_ABC_Handle : typeid,
+            $Global_Asset_ABC_Header : typeid,
+            pack_file_handle         : ^os.File
+        ) {
 
-        // Pack textures.
+            for asset_handle, asset_handle_i in Global_Asset_ABC_Handle {
 
-        for global_asset_texture_handle, global_asset_texture_handle_i in Global_Asset_Texture_Handle {
-
-            if global_asset_texture_handle != nil {
-
-                global_asset_texture_file_path := fmt.tprintf("./media/{}.png", reflect.enum_string(global_asset_texture_handle))
-
-                fmt.printf(
-                    "[{}/{}] Packing texture '{}' from file path '{}'...\n",
-                    global_asset_texture_handle_i,
-                    len(Global_Asset_Texture_Handle) - 1,
-                    global_asset_texture_handle,
-                    global_asset_texture_file_path,
-                )
-
-                global_asset_texture_file_data := os.read_entire_file(global_asset_texture_file_path, context.temp_allocator) or_else panic("Failed.")
-
-                global_asset_pack_texture_header : Global_Asset_Pack_Header = Global_Asset_Pack_Texture_Header {
-                    handle = global_asset_texture_handle,
-                    length = u32(len(global_asset_texture_file_data)),
+                if asset_handle == nil {
+                    continue
                 }
 
-                _ = os.write(global_asset_pack_file_handle, mem.any_to_bytes(global_asset_pack_texture_header)) or_else panic("Failed.")
-                _ = os.write(global_asset_pack_file_handle, global_asset_texture_file_data                    ) or_else panic("Failed.")
+                when Global_Asset_ABC_Handle == Global_Asset_Texture_Handle {
+                    EXTENSION :: "png"
+                } else when Global_Asset_ABC_Handle == Global_Asset_Sound_Handle {
+                    EXTENSION :: "wav"
+                } else when Global_Asset_ABC_Handle == Global_Asset_Font_Handle {
+                    EXTENSION :: "ttf"
+                }
+
+                asset_file_path := fmt.tprintf("./media/{}.{}", reflect.enum_string(asset_handle), EXTENSION)
+
+                fmt.printf(
+                    "[{}/{}] Packing abc '{}' from file path '{}'...\n",
+                    asset_handle_i,
+                    len(Global_Asset_ABC_Handle) - 1,
+                    asset_handle,
+                    asset_file_path,
+                )
+
+                asset_file_data := os.read_entire_file(asset_file_path, context.temp_allocator) or_else panic("Failed.")
+
+                header : Global_Asset_Pack_Header = Global_Asset_ABC_Header {
+                    handle = asset_handle,
+                    length = u32(len(asset_file_data)),
+                }
+
+                _ = os.write(pack_file_handle, mem.any_to_bytes(header)) or_else panic("Failed.")
+                _ = os.write(pack_file_handle, asset_file_data         ) or_else panic("Failed.")
 
             }
 
-        }
-
-        fmt.printf("\n")
-
-
-
-        // Pack sounds.
-
-        for global_asset_sound_handle, global_asset_sound_handle_i in Global_Asset_Sound_Handle {
-
-            if global_asset_sound_handle != nil {
-
-                global_asset_sound_file_path := fmt.tprintf("./media/{}.wav", reflect.enum_string(global_asset_sound_handle))
-
-                fmt.printf(
-                    "[{}/{}] Packing sound '{}' from file path '{}'...\n",
-                    global_asset_sound_handle_i,
-                    len(Global_Asset_Sound_Handle) - 1,
-                    global_asset_sound_handle,
-                    global_asset_sound_file_path,
-                )
-
-                global_asset_sound_file_data := os.read_entire_file(global_asset_sound_file_path, context.temp_allocator) or_else panic("Failed.")
-
-                global_asset_pack_sound_header : Global_Asset_Pack_Header = Global_Asset_Pack_Sound_Header {
-                    handle = global_asset_sound_handle,
-                    length = u32(len(global_asset_sound_file_data)),
-                }
-
-                _ = os.write(global_asset_pack_file_handle, mem.any_to_bytes(global_asset_pack_sound_header)) or_else panic("Failed.")
-                _ = os.write(global_asset_pack_file_handle, global_asset_sound_file_data                    ) or_else panic("Failed.")
-
-            }
+            fmt.printf("\n")
 
         }
-
-        fmt.printf("\n")
-
-
-
-        // Pack fonts.
-
-        for global_asset_font_handle, global_asset_font_handle_i in Global_Asset_Font_Handle {
-
-            if global_asset_font_handle != nil {
-
-                global_asset_font_file_path := fmt.tprintf("./media/{}.ttf", reflect.enum_string(global_asset_font_handle))
-
-                fmt.printf(
-                    "[{}/{}] Packing font '{}' from file path '{}'...\n",
-                    global_asset_font_handle_i,
-                    len(Global_Asset_Font_Handle) - 1,
-                    global_asset_font_handle,
-                    global_asset_font_file_path,
-                )
-
-                global_asset_font_file_data := os.read_entire_file(global_asset_font_file_path, context.temp_allocator) or_else panic("Failed.")
-
-                global_asset_pack_font_header : Global_Asset_Pack_Header = Global_Asset_Pack_Font_Header {
-                    handle = global_asset_font_handle,
-                    length = u32(len(global_asset_font_file_data)),
-                }
-
-                _ = os.write(global_asset_pack_file_handle, mem.any_to_bytes(global_asset_pack_font_header)) or_else panic("Failed.")
-                _ = os.write(global_asset_pack_file_handle, global_asset_font_file_data                    ) or_else panic("Failed.")
-
-            }
-
-        }
-
-        fmt.printf("\n")
 
     }}
 
