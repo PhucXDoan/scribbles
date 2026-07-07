@@ -624,8 +624,9 @@ main :: proc() {
         style            : Button_Style,
         mouse_hover_tint : raylib.Color,
         mouse_hovering   : bool,
-        mouse_pressed    : bool,
+        pressed          : bool,
         hidden           : bool,
+        disabled         : bool,
     }
 
     Button_Style :: union {
@@ -700,7 +701,11 @@ main :: proc() {
 
         }
 
-        button.mouse_pressed = button.mouse_hovering && raylib.IsMouseButtonPressed(.LEFT)
+        button.pressed = (
+            !button.disabled &&
+            button.mouse_hovering &&
+            raylib.IsMouseButtonPressed(.LEFT)
+        )
 
     }
 
@@ -708,7 +713,13 @@ main :: proc() {
 
         if !button.hidden {
 
-            dest : raylib.Rectangle
+            tint := raylib.WHITE
+
+            if button.disabled {
+                tint = raylib.DARKGRAY
+            } else if button.mouse_hovering {
+                tint = button.mouse_hover_tint
+            }
 
             switch style in button.style {
 
@@ -740,7 +751,7 @@ main :: proc() {
                         rec       = rec,
                         roundness = BUTTON_STYLE_LAME_ROUNDNESS,
                         segments  = 0,
-                        color     = button.mouse_hover_tint if button.mouse_hovering else raylib.LIGHTGRAY,
+                        color     = tint,
                     )
 
                     raylib.DrawTextEx(
@@ -778,7 +789,7 @@ main :: proc() {
                             style.dimensions.y / 2,
                         },
                         rotation = 0,
-                        tint     = button.mouse_hover_tint if button.mouse_hovering else raylib.WHITE,
+                        tint     = tint,
                     )
 
                 }
@@ -816,6 +827,8 @@ main :: proc() {
     easel_canvas_texture := raylib.LoadTextureFromImage(easel_canvas_image)
     friend_texture       :  Maybe(raylib.Texture)
 
+    easel_canvas_requirement_painted_pixel_minimum := 10
+    easel_canvas_requirement_painted_pixel_maximum := 0
 
 
 
@@ -1069,17 +1082,47 @@ main :: proc() {
         easel_canvas_back_button.hidden = mode != .Easel
         update_button(&easel_canvas_back_button)
 
-        if easel_canvas_back_button.mouse_pressed || (mode == .Easel && raylib.IsKeyPressed(.ESCAPE)) {
+        if easel_canvas_back_button.pressed || (mode == .Easel && raylib.IsKeyPressed(.ESCAPE)) {
             mode = .Normal
             raylib.PlaySound(global_asset_sounds[.Easel_Close])
         }
 
 
 
+
+        painted_pixel_count := 0
+
+        easel_canvas_pixels := raylib.LoadImageColors(easel_canvas_image)
+        defer raylib.UnloadImageColors(easel_canvas_pixels)
+
+        for y in 0 ..< easel_canvas_image.height {
+
+            for x in 0 ..< easel_canvas_image.width {
+
+                pixel := easel_canvas_pixels[y * easel_canvas_image.width + x]
+
+                if pixel != EASEL_DEFAULT_COLOR {
+                    painted_pixel_count += 1
+                }
+
+            }
+
+        }
+
+        satisfied := (
+            painted_pixel_count >= easel_canvas_requirement_painted_pixel_minimum &&
+            (painted_pixel_count <= easel_canvas_requirement_painted_pixel_maximum || easel_canvas_requirement_painted_pixel_maximum == 0)
+        )
+
+        easel_canvas_submit_button.disabled = !satisfied
+
+
+
         easel_canvas_submit_button.hidden = mode != .Easel
+
         update_button(&easel_canvas_submit_button)
 
-        if easel_canvas_submit_button.mouse_pressed {
+        if easel_canvas_submit_button.pressed {
 
             if friend_texture != nil {
                 raylib.UnloadTexture(friend_texture.?)
@@ -1141,49 +1184,6 @@ main :: proc() {
                     rotation = 0.0,
                     tint     = raylib.WHITE,
                 )
-
-            }
-
-
-
-            ////////////////////////////////////////////////////////////////////////////////
-            //
-            // Render friend.
-            //
-
-            control_animation(&friend_animation, .Cyclic)
-            update_animation(&friend_animation)
-
-            friend_x += raylib.GetFrameTime() * 10.0
-
-            if mode == .Normal {
-
-                friend_dest := raylib.Rectangle {
-                    friend_x,
-                    500.0,
-                    100.0 / 1 + 0.085 * math.sin(math.PI * friend_animation.value),
-                    100.0 * 1 + 0.125 * math.sin(math.PI * friend_animation.value),
-                }
-
-                friend_dest.y -= friend_dest.height * 0.33 * math.sin(math.PI * friend_animation.value)
-
-                friend_origin := raylib.Vector2 {
-                    friend_dest.width / 2,
-                    friend_dest.height,
-                }
-
-                if friend_texture != nil {
-
-                    raylib.DrawTexturePro(
-                        texture  = friend_texture.?,
-                        source   = { 0, 0, f32(friend_texture.?.width), f32(friend_texture.?.height) },
-                        dest     = friend_dest,
-                        origin   = friend_origin,
-                        rotation = 0,
-                        tint     = raylib.WHITE,
-                    )
-
-                }
 
             }
 
@@ -1350,12 +1350,84 @@ main :: proc() {
 
                 }
 
+                {
+
+                    builder := strings.builder_make(context.temp_allocator)
+                    defer strings.builder_destroy(&builder)
+
+                    fmt.sbprintf(&builder, "Requirements:\n")
+
+                    if easel_canvas_requirement_painted_pixel_minimum >= 1 {
+                        fmt.sbprintf(&builder, "* At least {} painted pixels\n", easel_canvas_requirement_painted_pixel_minimum)
+                    }
+
+                    if easel_canvas_requirement_painted_pixel_maximum != 0 {
+                        fmt.sbprintf(&builder, "* At most {} painted pixels\n", easel_canvas_requirement_painted_pixel_maximum)
+                    }
+
+                    fmt.sbprintf(&builder, "\n")
+                    fmt.sbprintf(&builder, "There are {} painted pixels...\n", painted_pixel_count)
+
+                    requirement_text := strings.to_cstring(&builder)
+
+                    raylib.DrawTextEx(
+                        font     = global_asset_fonts[.Sniglet],
+                        text     = requirement_text,
+                        position = { 50, 150 },
+                        fontSize = 30,
+                        spacing  = 0,
+                        tint     = raylib.BLACK,
+                    )
+
+                }
+
             }
 
             render_button(easel_canvas_back_button)
             render_button(easel_canvas_submit_button)
 
 
+
+            ////////////////////////////////////////////////////////////////////////////////
+            //
+            // Render friend.
+            //
+
+            control_animation(&friend_animation, .Cyclic)
+            update_animation(&friend_animation)
+
+            friend_x += raylib.GetFrameTime() * 10.0
+
+            if mode == .Normal {
+
+                friend_dest := raylib.Rectangle {
+                    friend_x,
+                    500.0,
+                    100.0 / 1 + 0.085 * math.sin(math.PI * friend_animation.value),
+                    100.0 * 1 + 0.125 * math.sin(math.PI * friend_animation.value),
+                }
+
+                friend_dest.y -= friend_dest.height * 0.33 * math.sin(math.PI * friend_animation.value)
+
+                friend_origin := raylib.Vector2 {
+                    friend_dest.width / 2,
+                    friend_dest.height,
+                }
+
+                if friend_texture != nil {
+
+                    raylib.DrawTexturePro(
+                        texture  = friend_texture.?,
+                        source   = { 0, 0, f32(friend_texture.?.width), f32(friend_texture.?.height) },
+                        dest     = friend_dest,
+                        origin   = friend_origin,
+                        rotation = 0,
+                        tint     = raylib.WHITE,
+                    )
+
+                }
+
+            }
 
         }
 
