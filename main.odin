@@ -791,7 +791,7 @@ main :: proc() {
     // Main loop.
     //
 
-    entities := [?]Main_Entity {
+    main_entities := [?]Main_Entity {
 
         Main_Entity_Kind.nil = {},
 
@@ -906,7 +906,7 @@ main :: proc() {
         // Update entities.
         //
 
-        for &entity in entities {
+        for &entity in main_entities {
 
 
 
@@ -971,8 +971,8 @@ main :: proc() {
                             &dialogue_bubbles,
                             Dialogue_Bubble {
                                 position = {
-                                    entities[Main_Entity_Kind.Rolypoly].position.x + entities[Main_Entity_Kind.Rolypoly].rendering_dimensions.x * 0.25,
-                                    entities[Main_Entity_Kind.Rolypoly].position.y - entities[Main_Entity_Kind.Rolypoly].rendering_dimensions.y * 0.25,
+                                    main_entities[Main_Entity_Kind.Rolypoly].position.x + main_entities[Main_Entity_Kind.Rolypoly].rendering_dimensions.x * 0.25,
+                                    main_entities[Main_Entity_Kind.Rolypoly].position.y - main_entities[Main_Entity_Kind.Rolypoly].rendering_dimensions.y * 0.25,
                                 },
                                 message = (
                                     game_state.pets < EASEL_COST
@@ -1240,7 +1240,7 @@ main :: proc() {
 
             if mode == .Main {
 
-                for entity in entities {
+                for entity in main_entities {
 
                     raylib.DrawTexturePro(
                         texture = global_asset_textures[entity.texture_handle],
