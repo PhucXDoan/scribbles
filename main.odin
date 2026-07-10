@@ -60,10 +60,10 @@ Animation :: struct {
 }
 
 Animation_Control :: enum {
-    Restart,
-    Cyclic,
-    Decrease,
-    Increase,
+    Clear_Increase_Reset,
+    Increase_Repeat,
+    Decrease_Stop,
+    Increase_Stop,
 }
 
 update_animation :: proc(animation : ^Animation) {
@@ -72,7 +72,7 @@ update_animation :: proc(animation : ^Animation) {
 
         switch animation.control {
 
-            case .Restart: {
+            case .Clear_Increase_Reset: {
 
                 animation.value += raylib.GetFrameTime() / animation.duration
 
@@ -83,17 +83,17 @@ update_animation :: proc(animation : ^Animation) {
 
             }
 
-            case .Cyclic: {
+            case .Increase_Repeat: {
                 animation.value += raylib.GetFrameTime() / animation.duration
                 animation.value  = math.mod_f32(animation.value, 1)
             }
 
-            case .Decrease: {
+            case .Decrease_Stop: {
                 animation.value -= raylib.GetFrameTime() / animation.duration
                 animation.value  = clamp(animation.value, 0, 1)
             }
 
-            case .Increase: {
+            case .Increase_Stop: {
                 animation.value += raylib.GetFrameTime() / animation.duration
                 animation.value  = clamp(animation.value, 0, 1)
             }
@@ -112,20 +112,20 @@ control_animation :: proc(animation : ^Animation, control : Animation_Control) {
 
     switch control {
 
-        case .Restart: {
+        case .Clear_Increase_Reset: {
             animation.value   = 0
             animation.running = true
         }
 
-        case .Cyclic: {
+        case .Increase_Repeat: {
             animation.running = true
         }
 
-        case .Decrease: {
+        case .Decrease_Stop: {
             animation.running = true
         }
 
-        case .Increase: {
+        case .Increase_Stop: {
             animation.running = true
         }
 
@@ -1039,7 +1039,7 @@ main :: proc() {
                     }
 
                     if !entity.walk_animation.running && entity.walk_displacement != {} {
-                        control_animation(&entity.walk_animation, .Restart)
+                        control_animation(&entity.walk_animation, .Clear_Increase_Reset)
                     }
 
                     update_animation(&entity.walk_animation)
@@ -1073,7 +1073,7 @@ main :: proc() {
 
             control_animation(
                 &entity.mouse_hover_animation,
-                .Increase if entity.mouse_hovering else .Decrease
+                .Increase_Stop if entity.mouse_hovering else .Decrease_Stop
             )
 
             update_animation(&entity.mouse_hover_animation)
@@ -1082,7 +1082,7 @@ main :: proc() {
 
                 control_animation(
                     &entity.lock_hover_animation,
-                    .Increase if entity.mouse_hovering else .Decrease
+                    .Increase_Stop if entity.mouse_hovering else .Decrease_Stop
                 )
 
                 old_lock_hover_animation_value := entity.lock_hover_animation.value
@@ -1145,7 +1145,7 @@ main :: proc() {
             )
 
             if entity.mouse_clicked {
-                control_animation(&entity.mouse_click_animation, .Restart)
+                control_animation(&entity.mouse_click_animation, .Clear_Increase_Reset)
             }
 
             update_animation(&entity.mouse_click_animation)
@@ -1159,7 +1159,7 @@ main :: proc() {
                         case .Rolypoly: {
 
                             game_state.pets += 1
-                            control_animation(&entity.mouse_click_animation, .Restart)
+                            control_animation(&entity.mouse_click_animation, .Clear_Increase_Reset)
 
                             @(static) time_since_last_click := f32(0)
 
@@ -1209,7 +1209,7 @@ main :: proc() {
                     }
 
                     if entity.locked {
-                        control_animation(&entity.lock_hover_animation, .Restart)
+                        control_animation(&entity.lock_hover_animation, .Clear_Increase_Reset)
                         raylib.PlaySound(global_asset_sounds[.Padlock_Locked])
                     }
 
