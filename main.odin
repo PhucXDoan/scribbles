@@ -416,6 +416,7 @@ main :: proc() {
         [31]u8,
         Save_File_Header_Game_State,
         Save_File_Header_Easel_Canvas_Image,
+        Save_File_Header_Flimsy_Friend,
     }
 
     Save_File_Header_Game_State :: struct #packed {
@@ -425,6 +426,11 @@ main :: proc() {
     Save_File_Header_Easel_Canvas_Image :: struct #packed {
         version : u8,
         length  : u32,
+    }
+
+    Save_File_Header_Flimsy_Friend :: struct #packed {
+        version      : u8,
+        image_length : u32,
     }
 
     #assert(size_of(Game_State) == 256)
@@ -444,6 +450,40 @@ main :: proc() {
     game_state              : Game_State_V1
     easel_canvas_image      : raylib.Image
     seconds_since_last_game : int
+
+    main_entities := [dynamic; 16]Main_Entity {
+
+        Main_Entity_Kind.nil = {},
+
+        Main_Entity_Kind.Rolypoly = {
+            kind          = .Rolypoly,
+            base_position = {
+                cast(f32) raylib.GetScreenWidth()  * 0.5,
+                cast(f32) raylib.GetScreenHeight() * 0.5,
+            },
+            origin                = { 0.5, 0.5 },
+            base_dimensions       = { 75, 50 },
+            texture_reference     = .Rolypoly,
+            mouse_hover_animation = { duration = 0.1  },
+            mouse_click_animation = { duration = 0.25 },
+        },
+
+        Main_Entity_Kind.Easel = {
+            kind          = .Easel,
+            base_position = {
+                cast(f32) raylib.GetScreenWidth()  * 0.85,
+                cast(f32) raylib.GetScreenHeight() * 0.6,
+            },
+            origin                = { 0.5, 1 },
+            base_dimensions       = { 100, 200 },
+            texture_reference     = .Easel,
+            mouse_hover_animation = { duration = 0.1 },
+            lock_hover_animation  = { duration = 0.1 },
+            mouse_click_animation = { duration = 0.1 },
+            locked                = {}, // Filled out later.
+        },
+
+    }
 
     {
 
@@ -497,6 +537,23 @@ main :: proc() {
 
 
 
+                    // Load flimsy friend.
+
+                    case Save_File_Header_Flimsy_Friend: {
+
+                        assert(header.version <= 1)
+
+                        image_data := eat(&remaining_save_file_data, int(header.image_length))
+
+                        image := raylib.LoadImageFromMemory(".png", raw_data(image_data), i32(len(image_data)))
+                        defer raylib.UnloadImage(image)
+
+                        create_flimsy_friend(&main_entities, image)
+
+                    }
+
+
+
                     case [31]u8 : panic("Invalid.")
                     case        : panic("Invalid.")
 
@@ -505,6 +562,8 @@ main :: proc() {
             }
 
         }
+
+        main_entities[Main_Entity_Kind.Easel].locked = !game_state.easel_unlocked
 
         if easel_canvas_image == {} {
             easel_canvas_image = raylib.GenImageColor(8, 8, EASEL_DEFAULT_COLOR)
@@ -518,7 +577,7 @@ main :: proc() {
 
     }
 
-    save_game :: proc(game_state : ^Game_State_V1, easel_canvas_image : raylib.Image) {
+    save_game :: proc(game_state : ^Game_State_V1, easel_canvas_image : raylib.Image, main_entities : []Main_Entity) {
 
         fmt.printf("Saving to '{}'...\n", SAVE_FILE_PATH)
 
@@ -561,6 +620,33 @@ main :: proc() {
             save_file_header : Save_File_Header = Save_File_Header_Easel_Canvas_Image {
                 version = 1,
                 length  = u32(image_length),
+            }
+
+            _ = os.write    (save_file_handle, mem.any_to_bytes(save_file_header)) or_else panic("Failed.")
+            _ = os.write_ptr(save_file_handle, image_data, int(image_length)     ) or_else panic("Failed.")
+
+        }
+
+
+
+        // Save flimsy friends.
+
+        for entity in main_entities {
+
+            if entity.kind != .Flimsy_Friend {
+                continue
+            }
+
+            image := raylib.LoadImageFromTexture(entity.texture_reference.(raylib.Texture))
+            defer raylib.UnloadImage(image)
+
+            image_length : i32
+            image_data   := raylib.ExportImageToMemory(image, ".png", &image_length)
+            defer raylib.MemFree(image_data)
+
+            save_file_header : Save_File_Header = Save_File_Header_Flimsy_Friend {
+                version      = 1,
+                image_length = u32(image_length),
             }
 
             _ = os.write    (save_file_handle, mem.any_to_bytes(save_file_header)) or_else panic("Failed.")
@@ -767,27 +853,39 @@ main :: proc() {
     // Entities.
     //
 
+    FLIMSY_FRIEND_BASE_DIMENSIONS         :: raylib.Vector2 { 35, 35 }
+    FLIMSY_FRIEND_WALK_ANIMATION_DURATION :: 1.25
+
+    Entity_Texture_Reference :: union {
+        Global_Asset_Texture_Handle,
+        raylib.Texture,
+    }
+
     Main_Entity_Kind :: enum {
         nil,
         Rolypoly,
         Easel,
+        Flimsy_Friend,
     }
 
     Main_Entity :: struct {
 
         kind                  : Main_Entity_Kind,
-        position              : raylib.Vector2,
+        base_position         : raylib.Vector2,
         origin                : raylib.Vector2,
         base_dimensions       : raylib.Vector2,
-        texture_handle        : Global_Asset_Texture_Handle,
+        texture_reference     : Entity_Texture_Reference,
         mouse_hover_animation : Animation,
         lock_hover_animation  : Animation,
         mouse_click_animation : Animation,
+        walk_animation        : Animation,
+        walk_displacement     : raylib.Vector2,
         locked                : bool,
 
         mouse_hovering        : bool,
         mouse_clicked         : bool,
 
+        rendering_position    : raylib.Vector2,
         rendering_dimensions  : raylib.Vector2,
 
     }
@@ -798,6 +896,27 @@ main :: proc() {
         font_handle : Global_Asset_Font_Handle,
     }
 
+    create_flimsy_friend :: proc(main_entities : ^[dynamic; 16]Main_Entity, image : raylib.Image) {
+
+        append(
+            main_entities,
+            Main_Entity {
+                kind          = .Flimsy_Friend,
+                base_position = {
+                    cast(f32) raylib.GetScreenWidth()  * 0.25 + f32(len(main_entities)) * 100,
+                    cast(f32) raylib.GetScreenHeight() * 0.7,
+                },
+                origin                = { 0.5, 1 },
+                base_dimensions       = FLIMSY_FRIEND_BASE_DIMENSIONS,
+                texture_reference     = raylib.LoadTextureFromImage(image),
+                mouse_hover_animation = { duration = 0.1                                   },
+                mouse_click_animation = { duration = 0.1                                   },
+                walk_animation        = { duration = FLIMSY_FRIEND_WALK_ANIMATION_DURATION },
+            }
+        )
+
+    }
+
 
 
     ////////////////////////////////////////////////////////////////////////////////
@@ -805,60 +924,14 @@ main :: proc() {
     // Main loop.
     //
 
-    main_entities := [?]Main_Entity {
-
-        Main_Entity_Kind.nil = {},
-
-        Main_Entity_Kind.Rolypoly = {
-            kind     = .Rolypoly,
-            position = {
-                cast(f32) raylib.GetScreenWidth()  * 0.5,
-                cast(f32) raylib.GetScreenHeight() * 0.5,
-            },
-            origin          = { 0.5, 0.5 },
-            base_dimensions = {
-                75,
-                50,
-            },
-            texture_handle        = .Rolypoly,
-            mouse_hover_animation = { duration = 0.1  },
-            lock_hover_animation  = {},
-            mouse_click_animation = { duration = 0.25 },
-        },
-
-        Main_Entity_Kind.Easel = {
-            kind     = .Easel,
-            position = {
-                cast(f32) raylib.GetScreenWidth()  * 0.85,
-                cast(f32) raylib.GetScreenHeight() * 0.6,
-            },
-            origin          = { 0.5, 1 },
-            base_dimensions = {
-                100,
-                200,
-            },
-            texture_handle        = .Easel,
-            mouse_hover_animation = { duration = 0.1 },
-            lock_hover_animation  = { duration = 0.1 },
-            mouse_click_animation = { duration = 0.1 },
-            locked                = !game_state.easel_unlocked,
-        },
-
-    }
-
     Mode :: enum {
         Main,
         Easel,
     }
 
-    mode                          := Mode.Main
-    friend_animation              := Animation { duration = 1 }
-    friend_x                      := cast(f32) 100.0
-
-
+    mode := Mode.Main
 
     easel_canvas_texture := raylib.LoadTextureFromImage(easel_canvas_image)
-    friend_texture       :  Maybe(raylib.Texture)
 
     easel_canvas_requirement_painted_pixel_minimum := 10
     easel_canvas_requirement_painted_pixel_maximum := 0
@@ -900,7 +973,7 @@ main :: proc() {
 
 
 
-    save_game(&game_state, easel_canvas_image)
+    save_game(&game_state, easel_canvas_image, main_entities[:])
 
     for {
 
@@ -908,7 +981,7 @@ main :: proc() {
         seconds_since_last_save_game := time.duration_seconds(time.diff(game_state.save_timestamp.? or_else time.now(), time.now()))
 
         if should_close || seconds_since_last_save_game >= 60 {
-            save_game(&game_state, easel_canvas_image)
+            save_game(&game_state, easel_canvas_image, main_entities[:])
         }
 
         if should_close {
@@ -930,6 +1003,59 @@ main :: proc() {
 
 
 
+            // Handle walking.
+
+            #partial switch entity.kind {
+
+                case .Flimsy_Friend: {
+
+                    if !entity.walk_animation.running && entity.walk_displacement == {} {
+
+                        if entity.base_position.x < f32(raylib.GetScreenWidth()) * 0.2 {
+
+                            entity.walk_displacement = { 20, 0 }
+
+                        } else if entity.base_position.x > f32(raylib.GetScreenWidth()) * 0.8 {
+
+                            entity.walk_displacement = { -20, 0 }
+
+                        } else if entity.base_position.y < f32(raylib.GetScreenHeight()) * 0.6 {
+
+                            entity.walk_displacement = { 0, 20 }
+
+                        } else if entity.base_position.y > f32(raylib.GetScreenHeight()) * 0.9 {
+
+                            entity.walk_displacement = { 0, -20 }
+
+                        } else {
+
+                            entity.walk_displacement = {
+                                f32(rand.int31_max(2) * 2 - 1) * (10 + 30 * rand.float32()),
+                                f32(rand.int31_max(2) * 2 - 1) * (     10 * rand.float32()),
+                            }
+
+                        }
+
+                    }
+
+                    if !entity.walk_animation.running && entity.walk_displacement != {} {
+                        control_animation(&entity.walk_animation, .Restart)
+                    }
+
+                    update_animation(&entity.walk_animation)
+
+                    if !entity.walk_animation.running {
+                        entity.base_position.x   += entity.walk_displacement.x
+                        entity.base_position.y   += entity.walk_displacement.y
+                        entity.walk_displacement  = {}
+                    }
+
+                }
+
+            }
+
+
+
             // Handle mouse hovering.
 
             entity.mouse_hovering = (
@@ -937,8 +1063,8 @@ main :: proc() {
                 raylib.CheckCollisionPointRec(
                     raylib.GetMousePosition(),
                     {
-                        entity.position.x - entity.rendering_dimensions.x * entity.origin.x,
-                        entity.position.y - entity.rendering_dimensions.y * entity.origin.y,
+                        entity.base_position.x - entity.rendering_dimensions.x * entity.origin.x,
+                        entity.base_position.y - entity.rendering_dimensions.y * entity.origin.y,
                         entity.rendering_dimensions.x,
                         entity.rendering_dimensions.y,
                     },
@@ -991,8 +1117,8 @@ main :: proc() {
                             &dialogue_bubbles,
                             Dialogue_Bubble {
                                 position = {
-                                    main_entities[Main_Entity_Kind.Rolypoly].position.x + main_entities[Main_Entity_Kind.Rolypoly].rendering_dimensions.x * 0.25,
-                                    main_entities[Main_Entity_Kind.Rolypoly].position.y - main_entities[Main_Entity_Kind.Rolypoly].rendering_dimensions.y * 0.25,
+                                    main_entities[Main_Entity_Kind.Rolypoly].rendering_position.x + main_entities[Main_Entity_Kind.Rolypoly].rendering_dimensions.x * 0.25,
+                                    main_entities[Main_Entity_Kind.Rolypoly].rendering_position.y - main_entities[Main_Entity_Kind.Rolypoly].rendering_dimensions.y * 0.25,
                                 },
                                 message = (
                                     game_state.pets < EASEL_COST
@@ -1109,6 +1235,23 @@ main :: proc() {
 
             }
 
+            if entity.walk_animation.running {
+                entity.rendering_dimensions.x /= 1 + 0.5 * math.sin(ease_animation(0, math.PI, entity.walk_animation, .Quartic_In_Out))
+                entity.rendering_dimensions.y *= 1 + 0.2 * math.sin(ease_animation(0, math.PI, entity.walk_animation, .Quartic_In_Out))
+            }
+
+
+
+            // Determine rendering position.
+
+            entity.rendering_position = entity.base_position
+
+            if entity.walk_animation.running {
+                entity.rendering_position.x += ease_animation(0, entity.walk_displacement.x, entity.walk_animation, .Quartic_In_Out)
+                entity.rendering_position.y += ease_animation(0, entity.walk_displacement.y, entity.walk_animation, .Quartic_In_Out)
+                entity.rendering_position.y -= 15 * math.pow(math.sin(entity.walk_animation.value * math.PI), 8)
+            }
+
         }
 
 
@@ -1173,7 +1316,6 @@ main :: proc() {
 
 
 
-
         painted_pixel_count := 0
 
         easel_canvas_pixels := raylib.LoadImageColors(easel_canvas_image)
@@ -1193,9 +1335,18 @@ main :: proc() {
 
         }
 
+        flimsy_friend_count := 0
+
+        for entity in main_entities {
+            if entity.kind == .Flimsy_Friend {
+                flimsy_friend_count += 1
+            }
+        }
+
         satisfied := (
             painted_pixel_count >= easel_canvas_requirement_painted_pixel_minimum &&
-            (painted_pixel_count <= easel_canvas_requirement_painted_pixel_maximum || easel_canvas_requirement_painted_pixel_maximum == 0)
+            (painted_pixel_count <= easel_canvas_requirement_painted_pixel_maximum || easel_canvas_requirement_painted_pixel_maximum == 0) &&
+            flimsy_friend_count < 3
         )
 
         easel_canvas_submit_button.disabled = !satisfied
@@ -1208,11 +1359,7 @@ main :: proc() {
 
         if easel_canvas_submit_button.pressed {
 
-            if friend_texture != nil {
-                raylib.UnloadTexture(friend_texture.?)
-            }
-
-            friend_texture = raylib.LoadTextureFromImage(easel_canvas_image)
+            create_flimsy_friend(&main_entities, easel_canvas_image)
 
             raylib.ImageClearBackground(&easel_canvas_image, EASEL_DEFAULT_COLOR)
 
@@ -1262,17 +1409,26 @@ main :: proc() {
 
                 for entity in main_entities {
 
+                    texture : raylib.Texture
+
+                    switch reference in entity.texture_reference {
+                        case nil                         : texture = {}
+                        case Global_Asset_Texture_Handle : texture = global_asset_textures[reference]
+                        case raylib.Texture              : texture = reference
+                        case                             : panic("Invalid.")
+                    }
+
                     raylib.DrawTexturePro(
-                        texture = global_asset_textures[entity.texture_handle],
+                        texture = texture,
                         source  = {
                             0,
                             0,
-                            cast(f32) global_asset_textures[entity.texture_handle].width,
-                            cast(f32) global_asset_textures[entity.texture_handle].height,
+                            cast(f32) texture.width,
+                            cast(f32) texture.height,
                         },
                         dest = {
-                            entity.position.x,
-                            entity.position.y,
+                            entity.rendering_position.x,
+                            entity.rendering_position.y,
                             entity.rendering_dimensions.x,
                             entity.rendering_dimensions.y,
                         },
@@ -1287,8 +1443,8 @@ main :: proc() {
                     if entity.locked {
 
                         dest := raylib.Rectangle {
-                            entity.position.x - entity.rendering_dimensions.x * (entity.origin.x - 0.5),
-                            entity.position.y - entity.rendering_dimensions.y * (entity.origin.y - 0.5),
+                            entity.rendering_position.x - entity.rendering_dimensions.x * (entity.origin.x - 0.5),
+                            entity.rendering_position.y - entity.rendering_dimensions.y * (entity.origin.y - 0.5),
                             ease_animation(75, 100, entity.lock_hover_animation, .Bounce_Out),
                             ease_animation(75, 100, entity.lock_hover_animation, .Bounce_Out),
                         }
@@ -1443,6 +1599,10 @@ main :: proc() {
                     builder := strings.builder_make(context.temp_allocator)
                     defer strings.builder_destroy(&builder)
 
+                    fmt.sbprintf(&builder, "Request:\n")
+                    fmt.sbprintf(&builder, "flimsy friend\n")
+                    fmt.sbprintf(&builder, "\n")
+
                     fmt.sbprintf(&builder, "Requirements:\n")
 
                     if easel_canvas_requirement_painted_pixel_minimum >= 1 {
@@ -1454,6 +1614,8 @@ main :: proc() {
                     }
 
                     fmt.sbprintf(&builder, "\n")
+
+                    fmt.sbprintf(&builder, "Evaluation:\n")
                     fmt.sbprintf(&builder, "There are {} painted pixels...\n", painted_pixel_count)
 
                     requirement_text := strings.to_cstring(&builder)
@@ -1473,49 +1635,6 @@ main :: proc() {
 
             render_button(easel_canvas_back_button)
             render_button(easel_canvas_submit_button)
-
-
-
-            ////////////////////////////////////////////////////////////////////////////////
-            //
-            // Render friend.
-            //
-
-            control_animation(&friend_animation, .Cyclic)
-            update_animation(&friend_animation)
-
-            friend_x += raylib.GetFrameTime() * 10.0
-
-            if mode == .Main {
-
-                friend_dest := raylib.Rectangle {
-                    friend_x,
-                    500.0,
-                    100.0 / 1 + 0.085 * math.sin(math.PI * friend_animation.value),
-                    100.0 * 1 + 0.125 * math.sin(math.PI * friend_animation.value),
-                }
-
-                friend_dest.y -= friend_dest.height * 0.33 * math.sin(math.PI * friend_animation.value)
-
-                friend_origin := raylib.Vector2 {
-                    friend_dest.width / 2,
-                    friend_dest.height,
-                }
-
-                if friend_texture != nil {
-
-                    raylib.DrawTexturePro(
-                        texture  = friend_texture.?,
-                        source   = { 0, 0, f32(friend_texture.?.width), f32(friend_texture.?.height) },
-                        dest     = friend_dest,
-                        origin   = friend_origin,
-                        rotation = 0,
-                        tint     = raylib.WHITE,
-                    )
-
-                }
-
-            }
 
         }
 
