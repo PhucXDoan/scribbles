@@ -187,6 +187,7 @@ main :: proc() {
         Padlock_Unlocked,
         Easel_Open,
         Easel_Close,
+        Tap,
     }
 
     Global_Asset_Font_Handle :: enum u32 {
@@ -1217,6 +1218,10 @@ main :: proc() {
                             mode = .Easel
                             raylib.PlaySound(global_asset_sounds[.Easel_Open])
 
+                        }
+
+                        case .Flimsy_Friend: {
+                            raylib.PlaySound(global_asset_sounds[.Tap])
                         }
 
                     }
