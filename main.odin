@@ -880,6 +880,7 @@ main :: proc() {
         mouse_click_animation : Animation,
         walk_animation        : Animation,
         walk_displacement     : raylib.Vector2,
+        walk_delay            : f32,
         locked                : bool,
 
         mouse_hovering        : bool,
@@ -1009,7 +1010,7 @@ main :: proc() {
 
                 case .Flimsy_Friend: {
 
-                    if !entity.walk_animation.running && entity.walk_displacement == {} {
+                    if !entity.walk_animation.running && entity.walk_displacement == {} && entity.walk_delay <= 0 {
 
                         if entity.base_position.x < f32(raylib.GetScreenWidth()) * 0.2 {
 
@@ -1036,15 +1037,22 @@ main :: proc() {
 
                         }
 
+                        entity.walk_delay = 3 * rand.float32()
+
                     }
 
-                    if !entity.walk_animation.running && entity.walk_displacement != {} {
+                    if entity.walk_delay > 0 {
+                        entity.walk_delay -= raylib.GetFrameTime()
+                        entity.walk_delay  = max(entity.walk_delay, 0)
+                    }
+
+                    if !entity.walk_animation.running && entity.walk_displacement != {} && entity.walk_delay <= 0 {
                         control_animation(&entity.walk_animation, .Clear_Increase_Reset)
                     }
 
                     update_animation(&entity.walk_animation)
 
-                    if !entity.walk_animation.running {
+                    if !entity.walk_animation.running && entity.walk_displacement != {} && entity.walk_delay <= 0 {
                         entity.base_position.x   += entity.walk_displacement.x
                         entity.base_position.y   += entity.walk_displacement.y
                         entity.walk_displacement  = {}
