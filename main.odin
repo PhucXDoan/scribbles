@@ -172,12 +172,16 @@ main :: proc() {
         Padlock,
     }
 
-    GLOBAL_ASSET_SOUND_XYLO_COUNT :: 3
+    GLOBAL_ASSET_SOUND_XYLO_COUNT  :: 3
+    GLOBAL_ASSET_SOUND_PAPER_COUNT :: 3
     Global_Asset_Sound_Handle :: enum u32 {
         nil,
         Xylo_0,
         Xylo_1,
         Xylo_2,
+        Paper_0,
+        Paper_1,
+        Paper_2,
         Padlock,
         Padlock_Locked,
         Padlock_Unlocked,
@@ -854,7 +858,7 @@ main :: proc() {
     //
 
     FLIMSY_FRIEND_BASE_DIMENSIONS         :: raylib.Vector2 { 35, 35 }
-    FLIMSY_FRIEND_WALK_ANIMATION_DURATION :: 1.25
+    FLIMSY_FRIEND_WALK_ANIMATION_DURATION :: 0.5
 
     Entity_Texture_Reference :: union {
         Global_Asset_Texture_Handle,
@@ -1047,7 +1051,28 @@ main :: proc() {
                     }
 
                     if !entity.walk_animation.running && entity.walk_displacement != {} && entity.walk_delay <= 0 {
+
                         control_animation(&entity.walk_animation, .Clear_Increase_Reset)
+
+                        if mode == .Main {
+
+                            #partial switch entity.kind {
+
+                                case .Flimsy_Friend: {
+
+                                    paper_sound_handle := Global_Asset_Sound_Handle(
+                                        i32(Global_Asset_Sound_Handle.Paper_0) +
+                                        rand.int31_max(GLOBAL_ASSET_SOUND_PAPER_COUNT)
+                                    )
+
+                                    raylib.PlaySound(global_asset_sounds[paper_sound_handle])
+
+                                }
+
+                            }
+
+                        }
+
                     }
 
                     update_animation(&entity.walk_animation)
