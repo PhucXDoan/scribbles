@@ -437,6 +437,8 @@ main :: proc() {
     Save_File_Header_Flimsy_Friend :: struct #packed {
         version      : u8,
         image_length : u32,
+        age          : time.Duration,
+        position     : Maybe(raylib.Vector2),
     }
 
     #assert(size_of(Game_State) == 256)
@@ -453,9 +455,9 @@ main :: proc() {
 
 
 
-    game_state              : Game_State_V1
-    easel_canvas_image      : raylib.Image
-    seconds_since_last_game : int
+    game_state               : Game_State_V1
+    easel_canvas_image       : raylib.Image
+    duration_since_last_game : time.Duration
 
     main_entities := [dynamic; 16]Main_Entity {
 
@@ -554,7 +556,12 @@ main :: proc() {
                         image := raylib.LoadImageFromMemory(".png", raw_data(image_data), i32(len(image_data)))
                         defer raylib.UnloadImage(image)
 
-                        create_flimsy_friend(&main_entities, image)
+                        create_flimsy_friend(
+                            main_entities = &main_entities,
+                            image         = image,
+                            age           = header.age,
+                            position      = header.position,
+                        )
 
                     }
 
@@ -575,10 +582,14 @@ main :: proc() {
             easel_canvas_image = raylib.GenImageColor(8, 8, EASEL_DEFAULT_COLOR)
         }
 
-        seconds_since_last_game = int(time.duration_seconds(time.diff(game_state.save_timestamp.? or_else time.now(), time.now())))
+        duration_since_last_game = time.diff(game_state.save_timestamp.? or_else time.now(), time.now())
 
         when ODIN_DEBUG {
-            fmt.printf("About {} seconds since last game.\n\n", seconds_since_last_game)
+            fmt.printf("About {} seconds since last game.\n\n", int(time.duration_seconds(duration_since_last_game)))
+        }
+
+        for &entity in main_entities {
+            entity.age += duration_since_last_game
         }
 
     }
@@ -653,6 +664,8 @@ main :: proc() {
             save_file_header : Save_File_Header = Save_File_Header_Flimsy_Friend {
                 version      = 1,
                 image_length = u32(image_length),
+                age          = entity.age,
+                position     = entity.base_position,
             }
 
             _ = os.write    (save_file_handle, mem.any_to_bytes(save_file_header)) or_else panic("Failed.")
@@ -862,6 +875,7 @@ main :: proc() {
     FLIMSY_FRIEND_BASE_DIMENSIONS         :: raylib.Vector2 { 35, 35 }
     FLIMSY_FRIEND_WALK_ANIMATION_DURATION :: 0.5
     FLIMSY_FRIEND_CLICKS_TO_POP           :: 5
+    FLIMSY_FRIEND_LIFESPAN                :: 1 * time.Hour
 
     Entity_Texture_Reference :: union {
         Global_Asset_Texture_Handle,
@@ -885,10 +899,12 @@ main :: proc() {
         mouse_hover_animation : Animation,
         lock_hover_animation  : Animation,
         mouse_click_animation : Animation,
+        death_animation       : Animation,
         walk_animation        : Animation,
         walk_displacement     : raylib.Vector2,
         walk_delay            : f32,
         locked                : bool,
+        age                   : time.Duration,
 
         mouse_hovering        : bool,
         mouse_clicked         : bool,
@@ -905,22 +921,30 @@ main :: proc() {
         font_handle : Global_Asset_Font_Handle,
     }
 
-    create_flimsy_friend :: proc(main_entities : ^[dynamic; 16]Main_Entity, image : raylib.Image) {
+    create_flimsy_friend :: proc(
+        main_entities : ^[dynamic; 16]Main_Entity,
+        image         : raylib.Image,
+        age           : time.Duration,
+        position      : Maybe(raylib.Vector2),
+    ) {
+
+        base_position := position.? or_else {
+            cast(f32) raylib.GetScreenWidth()  * 0.1 + f32(len(main_entities)) * 100,
+            cast(f32) raylib.GetScreenHeight() * 0.7,
+        }
 
         append(
             main_entities,
             Main_Entity {
-                kind          = .Flimsy_Friend,
-                base_position = {
-                    cast(f32) raylib.GetScreenWidth()  * 0.25 + f32(len(main_entities)) * 100,
-                    cast(f32) raylib.GetScreenHeight() * 0.7,
-                },
+                kind                  = .Flimsy_Friend,
+                base_position         = base_position,
                 origin                = { 0.5, 1 },
                 base_dimensions       = FLIMSY_FRIEND_BASE_DIMENSIONS,
                 texture_reference     = raylib.LoadTextureFromImage(image),
                 mouse_hover_animation = { duration = 0.1                                   },
                 mouse_click_animation = { duration = 0.1                                   },
                 walk_animation        = { duration = FLIMSY_FRIEND_WALK_ANIMATION_DURATION },
+                age                   = age,
             }
         )
 
@@ -1012,6 +1036,34 @@ main :: proc() {
 
         for &entity, entity_i in main_entities {
 
+            should_be_removed := false
+
+
+
+            // Handle aging.
+
+            entity.age += time.Duration(raylib.GetFrameTime() * f32(time.Second))
+
+            #partial switch entity.kind {
+
+                case .Flimsy_Friend: {
+
+                    if entity.age > FLIMSY_FRIEND_LIFESPAN {
+                        entity.death_animation.duration = 0.5 + 0.4 * f32(rand.int31_max(10))
+                        control_animation(&entity.death_animation, .Increase_Stop)
+                    }
+
+                }
+
+            }
+
+            update_animation(&entity.death_animation)
+
+            if entity.death_animation.value == 1 {
+                raylib.PlaySound(global_asset_sounds[.Pop])
+                should_be_removed = true
+            }
+
 
 
             // Handle walking.
@@ -1022,36 +1074,16 @@ main :: proc() {
 
                     if !entity.walk_animation.running && entity.walk_displacement == {} && entity.walk_delay <= 0 {
 
-                        if entity.base_position.x < f32(raylib.GetScreenWidth()) * 0.2 {
+                        entity.walk_displacement = 10 * raylib.Vector2Normalize({
+                            main_entities[Main_Entity_Kind.Rolypoly].rendering_position.x + f32(math.cos(time.duration_minutes(entity.age))) * 100 - entity.base_position.x,
+                            main_entities[Main_Entity_Kind.Rolypoly].rendering_position.y + f32(math.sin(time.duration_minutes(entity.age))) * 100 - entity.base_position.y,
+                        })
 
-                            entity.walk_displacement = { 20, 0 }
-
-                        } else if entity.base_position.x > f32(raylib.GetScreenWidth()) * 0.8 {
-
-                            entity.walk_displacement = { -20, 0 }
-
-                        } else if entity.base_position.y < f32(raylib.GetScreenHeight()) * 0.6 {
-
-                            entity.walk_displacement = { 0, 20 }
-
-                        } else if entity.base_position.y > f32(raylib.GetScreenHeight()) * 0.9 {
-
-                            entity.walk_displacement = { 0, -20 }
-
-                        } else {
-
-                            entity.walk_displacement = {
-                                f32(rand.int31_max(2) * 2 - 1) * (10 + 30 * rand.float32()),
-                                f32(rand.int31_max(2) * 2 - 1) * (     10 * rand.float32()),
-                            }
-
-                        }
-
-                        entity.walk_delay = 3 * rand.float32()
+                        entity.walk_delay = 5 * rand.float32()
 
                     }
 
-                    if entity.walk_delay > 0 {
+                    if entity.walk_delay > 0 && !entity.death_animation.running {
                         entity.walk_delay -= raylib.GetFrameTime()
                         entity.walk_delay  = max(entity.walk_delay, 0)
                     }
@@ -1232,7 +1264,7 @@ main :: proc() {
                             } else {
 
                                 raylib.PlaySound(global_asset_sounds[.Pop])
-                                append(&to_be_removed_main_entities, entity_i)
+                                should_be_removed = true
 
                             }
 
@@ -1294,6 +1326,11 @@ main :: proc() {
                 entity.rendering_dimensions.y *= 1 + 0.2 * math.sin(ease_animation(0, math.PI, entity.walk_animation, .Quartic_In_Out))
             }
 
+            if entity.death_animation.running {
+                entity.rendering_dimensions.x *= ease_animation(1, 2, entity.death_animation, .Quartic_In)
+                entity.rendering_dimensions.y *= ease_animation(1, 2, entity.death_animation, .Quartic_In)
+            }
+
 
 
             // Determine rendering position.
@@ -1304,6 +1341,14 @@ main :: proc() {
                 entity.rendering_position.x += ease_animation(0, entity.walk_displacement.x, entity.walk_animation, .Quartic_In_Out)
                 entity.rendering_position.y += ease_animation(0, entity.walk_displacement.y, entity.walk_animation, .Quartic_In_Out)
                 entity.rendering_position.y -= 15 * math.pow(math.sin(entity.walk_animation.value * math.PI), 8)
+            }
+
+
+
+            // Mark the entity to be deleted if needed.
+
+            if should_be_removed {
+                append(&to_be_removed_main_entities, entity_i)
             }
 
         }
@@ -1422,7 +1467,12 @@ main :: proc() {
 
         if easel_canvas_submit_button.pressed {
 
-            create_flimsy_friend(&main_entities, easel_canvas_image)
+            create_flimsy_friend(
+                main_entities = &main_entities,
+                image         = easel_canvas_image,
+                age           = 0,
+                position      = nil,
+            )
 
             raylib.ImageClearBackground(&easel_canvas_image, EASEL_DEFAULT_COLOR)
 
