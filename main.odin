@@ -8,6 +8,7 @@ import "core:math/rand"
 import "core:reflect"
 import "core:os"
 import "core:mem"
+import "core:time"
 import "vendor:raylib"
 
 
@@ -435,70 +436,71 @@ main :: proc() {
     Game_State_V1 :: struct #packed {
         pets           : u128,
         easel_unlocked : b8,
+        save_timestamp : Maybe(time.Time),
     }
 
 
 
-    game_state         : Game_State_V1
-    easel_canvas_image : raylib.Image
+    game_state              : Game_State_V1
+    easel_canvas_image      : raylib.Image
+    seconds_since_last_save : int
 
     {
 
         remaining_save_file_data, save_file_reading_error := os.read_entire_file(SAVE_FILE_PATH, context.temp_allocator)
 
-        if save_file_reading_error != nil {
-            save_game(game_state, {})
-            remaining_save_file_data = os.read_entire_file(SAVE_FILE_PATH, context.temp_allocator) or_else panic("Failed.")
-        }
+        if save_file_reading_error == nil {
 
-        for len(remaining_save_file_data) >= 1 {
+            for len(remaining_save_file_data) >= 1 {
 
-            save_file_header := eat(&remaining_save_file_data, Save_File_Header)
+                save_file_header := eat(&remaining_save_file_data, Save_File_Header)
 
-            switch header in save_file_header {
+                switch header in save_file_header {
 
 
 
-                // Load game state.
+                    // Load game state.
 
-                case Save_File_Header_Game_State: {
+                    case Save_File_Header_Game_State: {
 
-                    assert(header.version <= 1)
+                        assert(header.version <= 1)
 
-                    save_game_state := eat(&remaining_save_file_data, Game_State)
+                        save_game_state := eat(&remaining_save_file_data, Game_State)
 
-                    switch state in save_game_state {
+                        switch state in save_game_state {
 
-                        case Game_State_V1: {
-                            assert(game_state == {})
-                            game_state = state
+                            case Game_State_V1: {
+                                assert(game_state == {})
+                                game_state = state
+                            }
+
+                            case [255]u8 : panic("Invalid.")
+                            case         : panic("Invalid.")
+
                         }
-
-                        case [255]u8 : panic("Invalid.")
-                        case         : panic("Invalid.")
 
                     }
 
+
+
+                    // Load easel canvas image.
+
+                    case Save_File_Header_Easel_Canvas_Image: {
+
+                        assert(header.version <= 1)
+
+                        image_data := eat(&remaining_save_file_data, int(header.length))
+
+                        easel_canvas_image = raylib.LoadImageFromMemory(".png", raw_data(image_data), i32(len(image_data)))
+
+                    }
+
+
+
+                    case [31]u8 : panic("Invalid.")
+                    case        : panic("Invalid.")
+
                 }
-
-
-
-                // Load easel canvas image.
-
-                case Save_File_Header_Easel_Canvas_Image: {
-
-                    assert(header.version <= 1)
-
-                    image_data := eat(&remaining_save_file_data, int(header.length))
-
-                    easel_canvas_image = raylib.LoadImageFromMemory(".png", raw_data(image_data), i32(len(image_data)))
-
-                }
-
-
-
-                case [31]u8 : panic("Invalid.")
-                case        : panic("Invalid.")
 
             }
 
@@ -508,14 +510,26 @@ main :: proc() {
             easel_canvas_image = raylib.GenImageColor(8, 8, EASEL_DEFAULT_COLOR)
         }
 
+        seconds_since_last_save = int(time.duration_seconds(time.diff(game_state.save_timestamp.? or_else time.now(), time.now())))
+
+        when ODIN_DEBUG {
+            fmt.printf("About {} seconds since last save.\n\n", seconds_since_last_save)
+        }
+
     }
 
-    save_game :: proc(game_state : Game_State, easel_canvas_image : raylib.Image) {
+    save_game :: proc(game_state : ^Game_State_V1, easel_canvas_image : raylib.Image) {
 
         fmt.printf("Saving to '{}'...\n", SAVE_FILE_PATH)
 
         save_file_handle := os.open(SAVE_FILE_PATH, os.O_CREATE | os.O_TRUNC | os.O_APPEND) or_else panic("Failed.")
         defer os.close(save_file_handle)
+
+
+
+        // Update the save timestamp for future use upon next loading.
+
+        game_state.save_timestamp = time.now()
 
 
 
@@ -527,7 +541,7 @@ main :: proc() {
                 version = 1,
             }
 
-            save_game_state : Game_State = game_state
+            save_game_state : Game_State = game_state^
 
             _ = os.write(save_file_handle, mem.any_to_bytes(save_file_header)) or_else panic("Failed.")
             _ = os.write(save_file_handle, mem.any_to_bytes(save_game_state )) or_else panic("Failed.")
@@ -886,12 +900,12 @@ main :: proc() {
 
 
 
-    save_game(game_state, easel_canvas_image)
+    save_game(&game_state, easel_canvas_image)
 
     for {
 
         if raylib.WindowShouldClose() {
-            save_game(game_state, easel_canvas_image)
+            save_game(&game_state, easel_canvas_image)
             break
         }
 
