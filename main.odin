@@ -188,6 +188,7 @@ main :: proc() {
         Easel_Open,
         Easel_Close,
         Tap,
+        Pop,
     }
 
     Global_Asset_Font_Handle :: enum u32 {
@@ -860,6 +861,7 @@ main :: proc() {
 
     FLIMSY_FRIEND_BASE_DIMENSIONS         :: raylib.Vector2 { 35, 35 }
     FLIMSY_FRIEND_WALK_ANIMATION_DURATION :: 0.5
+    FLIMSY_FRIEND_CLICKS_TO_POP           :: 5
 
     Entity_Texture_Reference :: union {
         Global_Asset_Texture_Handle,
@@ -890,6 +892,7 @@ main :: proc() {
 
         mouse_hovering        : bool,
         mouse_clicked         : bool,
+        click_count           : int,
 
         rendering_position    : raylib.Vector2,
         rendering_dimensions  : raylib.Vector2,
@@ -1005,7 +1008,9 @@ main :: proc() {
         // Update entities.
         //
 
-        for &entity in main_entities {
+        to_be_removed_main_entities : [dynamic; cap(main_entities)]int
+
+        for &entity, entity_i in main_entities {
 
 
 
@@ -1179,12 +1184,10 @@ main :: proc() {
             )
 
             if entity.mouse_clicked {
+
                 control_animation(&entity.mouse_click_animation, .Clear_Increase_Reset)
-            }
 
-            update_animation(&entity.mouse_click_animation)
-
-            if entity.mouse_clicked {
+                entity.click_count += 1
 
                 if !entity.locked {
 
@@ -1221,7 +1224,18 @@ main :: proc() {
                         }
 
                         case .Flimsy_Friend: {
-                            raylib.PlaySound(global_asset_sounds[.Tap])
+
+                            if entity.click_count < FLIMSY_FRIEND_CLICKS_TO_POP {
+
+                                raylib.PlaySound(global_asset_sounds[.Tap])
+
+                            } else {
+
+                                raylib.PlaySound(global_asset_sounds[.Pop])
+                                append(&to_be_removed_main_entities, entity_i)
+
+                            }
+
                         }
 
                     }
@@ -1254,6 +1268,8 @@ main :: proc() {
                 }
 
             }
+
+            update_animation(&entity.mouse_click_animation)
 
 
 
@@ -1290,6 +1306,15 @@ main :: proc() {
                 entity.rendering_position.y -= 15 * math.pow(math.sin(entity.walk_animation.value * math.PI), 8)
             }
 
+        }
+
+
+
+        // We get rid of entities in the reverse order that they were marked to be removed.
+        // This is to make it so the indices do not have to be updated because things are moved around.
+
+        #reverse for main_entity_index in to_be_removed_main_entities {
+            unordered_remove(&main_entities, main_entity_index)
         }
 
 
