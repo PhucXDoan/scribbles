@@ -443,7 +443,7 @@ main :: proc() {
 
     game_state              : Game_State_V1
     easel_canvas_image      : raylib.Image
-    seconds_since_last_save : int
+    seconds_since_last_game : int
 
     {
 
@@ -510,10 +510,10 @@ main :: proc() {
             easel_canvas_image = raylib.GenImageColor(8, 8, EASEL_DEFAULT_COLOR)
         }
 
-        seconds_since_last_save = int(time.duration_seconds(time.diff(game_state.save_timestamp.? or_else time.now(), time.now())))
+        seconds_since_last_game = int(time.duration_seconds(time.diff(game_state.save_timestamp.? or_else time.now(), time.now())))
 
         when ODIN_DEBUG {
-            fmt.printf("About {} seconds since last save.\n\n", seconds_since_last_save)
+            fmt.printf("About {} seconds since last game.\n\n", seconds_since_last_game)
         }
 
     }
@@ -904,8 +904,14 @@ main :: proc() {
 
     for {
 
-        if raylib.WindowShouldClose() {
+        should_close                 := raylib.WindowShouldClose()
+        seconds_since_last_save_game := time.duration_seconds(time.diff(game_state.save_timestamp.? or_else time.now(), time.now()))
+
+        if should_close || seconds_since_last_save_game >= 60 {
             save_game(&game_state, easel_canvas_image)
+        }
+
+        if should_close {
             break
         }
 
