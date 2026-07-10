@@ -589,7 +589,21 @@ main :: proc() {
         }
 
         for &entity in main_entities {
+
+            #partial switch entity.kind {
+
+                case .Flimsy_Friend: {
+
+                    duration_of_productivity := clamp(duration_since_last_game, 0, FLIMSY_FRIEND_LIFESPAN - entity.age)
+
+                    game_state.pets += u128(FLIMSY_FRIEND_EXPECTED_PETS_PER_SECOND * time.duration_seconds(duration_of_productivity))
+
+                }
+
+            }
+
             entity.age += duration_since_last_game
+
         }
 
     }
@@ -872,10 +886,12 @@ main :: proc() {
     // Entities.
     //
 
-    FLIMSY_FRIEND_BASE_DIMENSIONS         :: raylib.Vector2 { 35, 35 }
-    FLIMSY_FRIEND_WALK_ANIMATION_DURATION :: 0.5
-    FLIMSY_FRIEND_CLICKS_TO_POP           :: 5
-    FLIMSY_FRIEND_LIFESPAN                :: 1 * time.Hour
+    FLIMSY_FRIEND_BASE_DIMENSIONS                 :: raylib.Vector2 { 35, 35 }
+    FLIMSY_FRIEND_CLICKS_TO_POP                   :: 5
+    FLIMSY_FRIEND_LIFESPAN                        :: 1 * time.Hour
+    FLIMSY_FRIEND_WALK_ANIMATION_DURATION_SECONDS :: 0.5
+    FLIMSY_FRIEND_EXPECTED_WALK_DELAY_SECONDS     :: 2.5
+    FLIMSY_FRIEND_EXPECTED_PETS_PER_SECOND        :: 1 / (FLIMSY_FRIEND_EXPECTED_WALK_DELAY_SECONDS + FLIMSY_FRIEND_WALK_ANIMATION_DURATION_SECONDS)
 
     Entity_Texture_Reference :: union {
         Global_Asset_Texture_Handle,
@@ -941,9 +957,9 @@ main :: proc() {
                 origin                = { 0.5, 1 },
                 base_dimensions       = FLIMSY_FRIEND_BASE_DIMENSIONS,
                 texture_reference     = raylib.LoadTextureFromImage(image),
-                mouse_hover_animation = { duration = 0.1                                   },
-                mouse_click_animation = { duration = 0.1                                   },
-                walk_animation        = { duration = FLIMSY_FRIEND_WALK_ANIMATION_DURATION },
+                mouse_hover_animation = { duration = 0.1                                           },
+                mouse_click_animation = { duration = 0.1                                           },
+                walk_animation        = { duration = FLIMSY_FRIEND_WALK_ANIMATION_DURATION_SECONDS },
                 age                   = age,
             }
         )
@@ -1079,7 +1095,7 @@ main :: proc() {
                             main_entities[Main_Entity_Kind.Rolypoly].rendering_position.y + f32(math.sin(time.duration_minutes(entity.age))) * 100 - entity.base_position.y,
                         })
 
-                        entity.walk_delay = 5 * rand.float32()
+                        entity.walk_delay = FLIMSY_FRIEND_EXPECTED_WALK_DELAY_SECONDS * 2 * rand.float32()
 
                     }
 
@@ -1116,9 +1132,13 @@ main :: proc() {
                     update_animation(&entity.walk_animation)
 
                     if !entity.walk_animation.running && entity.walk_displacement != {} && entity.walk_delay <= 0 {
+
                         entity.base_position.x   += entity.walk_displacement.x
                         entity.base_position.y   += entity.walk_displacement.y
                         entity.walk_displacement  = {}
+
+                        pet_rolypoly(&game_state, main_entities[:], mode)
+
                     }
 
                 }
@@ -1226,26 +1246,7 @@ main :: proc() {
                     #partial switch entity.kind {
 
                         case .Rolypoly: {
-
-                            game_state.pets += 1
-                            control_animation(&entity.mouse_click_animation, .Clear_Increase_Reset)
-
-                            @(static) time_since_last_click := f32(0)
-
-                            xylo_sound_handle := Global_Asset_Sound_Handle(
-                                i32(Global_Asset_Sound_Handle.Xylo_0) +
-                                rand.int31_max(GLOBAL_ASSET_SOUND_XYLO_COUNT)
-                            )
-
-                            raylib.SetSoundVolume(
-                                global_asset_sounds[xylo_sound_handle],
-                                min(max(f32(raylib.GetTime()) - time_since_last_click, 0), 1)
-                            )
-
-                            raylib.PlaySound(global_asset_sounds[xylo_sound_handle])
-
-                            time_since_last_click = f32(raylib.GetTime())
-
+                            pet_rolypoly(&game_state, main_entities[:], mode)
                         }
 
                         case .Easel: {
@@ -1360,6 +1361,38 @@ main :: proc() {
 
         #reverse for main_entity_index in to_be_removed_main_entities {
             unordered_remove(&main_entities, main_entity_index)
+        }
+
+
+
+        pet_rolypoly :: proc(
+            game_state    : ^Game_State_V1,
+            main_entities : []Main_Entity,
+            mode          : Mode,
+        ) {
+
+            game_state.pets += 1
+
+            control_animation(&main_entities[Main_Entity_Kind.Rolypoly].mouse_click_animation, .Clear_Increase_Reset)
+
+            @(static) time_since_last_click := f32(0)
+
+            xylo_sound_handle := Global_Asset_Sound_Handle(
+                i32(Global_Asset_Sound_Handle.Xylo_0) +
+                rand.int31_max(GLOBAL_ASSET_SOUND_XYLO_COUNT)
+            )
+
+            raylib.SetSoundVolume(
+                global_asset_sounds[xylo_sound_handle],
+                min(max(f32(raylib.GetTime()) - time_since_last_click, 0), 1)
+            )
+
+            if mode == .Main {
+                raylib.PlaySound(global_asset_sounds[xylo_sound_handle])
+            }
+
+            time_since_last_click = f32(raylib.GetTime())
+
         }
 
 
