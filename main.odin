@@ -170,6 +170,7 @@ main :: proc() {
         Rolypoly,
         Easel,
         Padlock,
+        Merowchant_Outside,
     }
 
     GLOBAL_ASSET_SOUND_XYLO_COUNT  :: 3
@@ -412,7 +413,6 @@ main :: proc() {
     // Load local save-file.
     //
 
-    EASEL_COST          :: 100
     EASEL_DEFAULT_COLOR :: raylib.Color { 234, 240, 243, 255 }
 
     SAVE_FILE_PATH :: "./scribbles.save"
@@ -448,9 +448,10 @@ main :: proc() {
     }
 
     Game_State_V1 :: struct #packed {
-        pets           : u128,
-        easel_unlocked : b8,
-        save_timestamp : Maybe(time.Time),
+        pets                : u128,
+        easel_unlocked      : b8,
+        save_timestamp      : Maybe(time.Time),
+        merowchant_unlocked : b8,
     }
 
 
@@ -489,6 +490,23 @@ main :: proc() {
             lock_hover_animation  = { duration = 0.1 },
             mouse_click_animation = { duration = 0.1 },
             locked                = {}, // Filled out later.
+            pet_cost              = 100,
+        },
+
+        Main_Entity_Kind.Merowchant = Main_Entity {
+            kind          = .Merowchant,
+            base_position = {
+                cast(f32) raylib.GetScreenWidth()  * 0.25,
+                cast(f32) raylib.GetScreenHeight() * 0.35,
+            },
+            origin                = { 0.5, 1 },
+            base_dimensions       = { 175, 175 },
+            texture_reference     = .Merowchant_Outside,
+            mouse_hover_animation = { duration = 0.1 },
+            lock_hover_animation  = { duration = 0.1 },
+            mouse_click_animation = { duration = 0.1 },
+            locked                = true,
+            pet_cost              = 10_000,
         },
 
     }
@@ -576,7 +594,8 @@ main :: proc() {
 
         }
 
-        main_entities[Main_Entity_Kind.Easel].locked = !game_state.easel_unlocked
+        main_entities[Main_Entity_Kind.Easel     ].locked = !game_state.easel_unlocked
+        main_entities[Main_Entity_Kind.Merowchant].locked = !game_state.merowchant_unlocked
 
         if easel_canvas_image == {} {
             easel_canvas_image = raylib.GenImageColor(8, 8, EASEL_DEFAULT_COLOR)
@@ -617,9 +636,11 @@ main :: proc() {
 
 
 
-        // Update the save timestamp for future use upon next loading.
+        // Save some game state info.
 
-        game_state.save_timestamp = time.now()
+        game_state.save_timestamp      = time.now()
+        game_state.easel_unlocked      = !main_entities[Main_Entity_Kind.Easel     ].locked
+        game_state.merowchant_unlocked = !main_entities[Main_Entity_Kind.Merowchant].locked
 
 
 
@@ -899,10 +920,17 @@ main :: proc() {
     }
 
     Main_Entity_Kind :: enum {
+
         nil,
+
+        // Fixed entities.
         Rolypoly,
         Easel,
+        Merowchant,
+
+        // Volatile entities.
         Flimsy_Friend,
+
     }
 
     Main_Entity :: struct {
@@ -921,6 +949,7 @@ main :: proc() {
         walk_delay            : f32,
         locked                : bool,
         age                   : time.Duration,
+        pet_cost              : u128,
 
         mouse_hovering        : bool,
         mouse_clicked         : bool,
@@ -1193,36 +1222,32 @@ main :: proc() {
             #partial switch entity.kind {
 
                 case .Rolypoly: {
-
-                    raylib.SetMouseCursor(
-                        raylib.MouseCursor.POINTING_HAND if entity.mouse_hovering else raylib.MouseCursor.DEFAULT
-                    )
-
+                    raylib.SetMouseCursor((
+                        raylib.MouseCursor.POINTING_HAND
+                        if entity.mouse_hovering
+                        else raylib.MouseCursor.DEFAULT
+                    ))
                 }
 
-                case .Easel: {
+            }
 
-                    if entity.locked && entity.mouse_hover_animation.value == 1 {
+            if entity.locked && entity.pet_cost >= 1 && entity.mouse_hover_animation.value == 1 {
 
-                        append(
-                            &dialogue_bubbles,
-                            Dialogue_Bubble {
-                                position = {
-                                    main_entities[Main_Entity_Kind.Rolypoly].rendering_position.x + main_entities[Main_Entity_Kind.Rolypoly].rendering_dimensions.x * 0.25,
-                                    main_entities[Main_Entity_Kind.Rolypoly].rendering_position.y - main_entities[Main_Entity_Kind.Rolypoly].rendering_dimensions.y * 0.25,
-                                },
-                                message = (
-                                    game_state.pets < EASEL_COST
-                                        ? fmt.ctprintf("I need {} pets...", EASEL_COST)
-                                        : fmt.ctprintf("Unlock for {} pets...?", EASEL_COST)
-                                ),
-                                font_handle = .Sniglet,
-                            }
-                        )
-
+                append(
+                    &dialogue_bubbles,
+                    Dialogue_Bubble {
+                        position = {
+                            main_entities[Main_Entity_Kind.Rolypoly].rendering_position.x + main_entities[Main_Entity_Kind.Rolypoly].rendering_dimensions.x * 0.25,
+                            main_entities[Main_Entity_Kind.Rolypoly].rendering_position.y - main_entities[Main_Entity_Kind.Rolypoly].rendering_dimensions.y * 0.25,
+                        },
+                        message = (
+                            game_state.pets < entity.pet_cost
+                                ? fmt.ctprintf("I need {} pets...", entity.pet_cost)
+                                : fmt.ctprintf("Unlock for {} pets...?", entity.pet_cost)
+                        ),
+                        font_handle = .Sniglet,
                     }
-
-                }
+                )
 
             }
 
@@ -1275,21 +1300,12 @@ main :: proc() {
 
                 } else if entity.lock_hover_animation.value == 1 { // To make sure user hover over lock for long enough...
 
-                    #partial switch entity.kind {
+                    if entity.locked && entity.pet_cost >= 1 && game_state.pets >= entity.pet_cost {
 
-                        case .Easel: {
+                        game_state.pets -= entity.pet_cost
+                        entity.locked    = false
 
-                            if game_state.pets >= EASEL_COST {
-
-                                game_state.pets           -= EASEL_COST
-                                game_state.easel_unlocked  = true
-                                entity.locked              = false
-
-                                raylib.PlaySound(global_asset_sounds[.Padlock_Unlocked])
-
-                            }
-
-                        }
+                        raylib.PlaySound(global_asset_sounds[.Padlock_Unlocked])
 
                     }
 
