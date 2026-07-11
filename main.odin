@@ -512,7 +512,7 @@ main :: proc() {
             lock_hover_animation  = { duration = 0.1 },
             mouse_click_animation = { duration = 0.1 },
             locked                = true,
-            pet_cost              = 1,
+            pet_cost              = 9_999,
         },
 
     }
