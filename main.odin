@@ -1782,6 +1782,37 @@ main :: proc() {
             render_button(easel_canvas_back_button)
             render_button(easel_canvas_submit_button)
 
+
+
+            ////////////////////////////////////////////////////////////////////////////////
+            //
+            // Display version info.
+            //
+
+            {
+
+                VERSION_INFO_FONT_HANDLE :: Global_Asset_Font_Handle.Sniglet
+                VERSION_INFO_FONT_SIZE   :: 20
+
+                text := strings.clone_to_cstring(os.args[1], context.temp_allocator)
+
+                measurement := raylib.MeasureTextEx(
+                    font     = global_asset_fonts[VERSION_INFO_FONT_HANDLE],
+                    text     = text,
+                    fontSize = VERSION_INFO_FONT_SIZE,
+                    spacing  = 0,
+                )
+
+                raylib.DrawTextEx(
+                    font     = global_asset_fonts[VERSION_INFO_FONT_HANDLE],
+                    text     = text,
+                    position = { f32(raylib.GetScreenWidth()) - 10 - measurement.x, 10 },
+                    fontSize = VERSION_INFO_FONT_SIZE,
+                    spacing  = 0,
+                    tint     = raylib.WHITE,
+                )
+            }
+
         }
 
 
