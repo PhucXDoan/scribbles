@@ -1981,7 +1981,7 @@ main :: proc() {
                 VERSION_INFO_FONT_HANDLE :: Global_Asset_Font_Handle.Sniglet
                 VERSION_INFO_FONT_SIZE   :: 20
 
-                text := strings.clone_to_cstring(os.args[1], context.temp_allocator)
+                text := strings.clone_to_cstring(#config(VERSION, "???"), context.temp_allocator)
 
                 measurement := raylib.MeasureTextEx(
                     font     = global_asset_fonts[VERSION_INFO_FONT_HANDLE],
