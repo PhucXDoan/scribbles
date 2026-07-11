@@ -171,6 +171,9 @@ main :: proc() {
         Easel,
         Padlock,
         Merowchant_Outside,
+        Merowchant_Table,
+        Merowchant_Background,
+        Merowchant_Cat,
     }
 
     GLOBAL_ASSET_SOUND_XYLO_COUNT  :: 3
@@ -190,6 +193,9 @@ main :: proc() {
         Easel_Close,
         Tap,
         Pop,
+        Merowchant_Open,
+        Merowchant_Close,
+        Merowchant_Meow,
     }
 
     Global_Asset_Font_Handle :: enum u32 {
@@ -506,7 +512,7 @@ main :: proc() {
             lock_hover_animation  = { duration = 0.1 },
             mouse_click_animation = { duration = 0.1 },
             locked                = true,
-            pet_cost              = 10_000,
+            pet_cost              = 1,
         },
 
     }
@@ -1005,6 +1011,7 @@ main :: proc() {
     Mode :: enum {
         Main,
         Easel,
+        Merowchant,
     }
 
     mode := Mode.Main
@@ -1015,6 +1022,25 @@ main :: proc() {
     easel_canvas_requirement_painted_pixel_maximum := 0
 
 
+
+    merowchant_cat_hover_animation := Animation { duration = 0.1 }
+
+    merowchant_back_button := Button {
+
+        center = {
+            f32(raylib.GetScreenWidth() ) * 0.05,
+            f32(raylib.GetScreenHeight()) * 0.95,
+        },
+
+        style = Button_Style_Lame {
+            text        = "Back",
+            font_handle = .Sniglet,
+            font_size   = 30,
+        },
+
+        mouse_hover_tint = raylib.GREEN,
+
+    }
 
     easel_canvas_back_button := Button {
 
@@ -1275,10 +1301,13 @@ main :: proc() {
                         }
 
                         case .Easel: {
-
                             mode = .Easel
                             raylib.PlaySound(global_asset_sounds[.Easel_Open])
+                        }
 
+                        case .Merowchant: {
+                            mode = .Merowchant
+                            raylib.PlaySound(global_asset_sounds[.Merowchant_Open])
                         }
 
                         case .Flimsy_Friend: {
@@ -1466,11 +1495,6 @@ main :: proc() {
         easel_canvas_back_button.hidden = mode != .Easel
         update_button(&easel_canvas_back_button)
 
-        if easel_canvas_back_button.pressed || (mode == .Easel && raylib.IsKeyPressed(.ESCAPE)) {
-            mode = .Main
-            raylib.PlaySound(global_asset_sounds[.Easel_Close])
-        }
-
 
 
         painted_pixel_count := 0
@@ -1528,6 +1552,81 @@ main :: proc() {
             mode = .Main
             raylib.PlaySound(global_asset_sounds[.Easel_Close])
 
+        }
+
+
+
+        ////////////////////////////////////////////////////////////////////////////////
+        //
+        // Update Merowchant.
+        //
+
+        merowchant_cat_position   := raylib.Vector2 { 750, 475 }
+        merowchant_cat_dimensions := raylib.Vector2 { 300, 350 }
+        merowchant_cat_dimensions.x *= ease_animation(1, 1.1, merowchant_cat_hover_animation, .Quadratic_Out)
+        merowchant_cat_dimensions.y *= ease_animation(1, 1.1, merowchant_cat_hover_animation, .Quadratic_Out)
+
+        merowchant_cat_origin     := raylib.Vector2 { merowchant_cat_dimensions.x * 0.5, merowchant_cat_dimensions.y * 1 }
+
+        hovering_merowchant_cat := mode == .Merowchant && raylib.CheckCollisionPointRec(
+            raylib.GetMousePosition(),
+            {
+                merowchant_cat_position.x - merowchant_cat_origin.x,
+                merowchant_cat_position.y - merowchant_cat_origin.y,
+                merowchant_cat_dimensions.x,
+                merowchant_cat_dimensions.y,
+            },
+        )
+
+        control_animation(
+            &merowchant_cat_hover_animation,
+            .Increase_Stop if hovering_merowchant_cat else .Decrease_Stop
+        )
+
+        update_animation(&merowchant_cat_hover_animation)
+
+        if mode == .Merowchant {
+
+            if hovering_merowchant_cat {
+
+                append(
+                    &dialogue_bubbles,
+                    Dialogue_Bubble {
+                        position = {
+                            merowchant_cat_position.x,
+                            merowchant_cat_position.y - merowchant_cat_dimensions.y * 0.9,
+                        },
+                        message = "i dont have anything right now...",
+                        font_handle = .Sniglet,
+                    }
+                )
+
+            }
+
+            if hovering_merowchant_cat && raylib.IsMouseButtonPressed(.LEFT) {
+                raylib.PlaySound(global_asset_sounds[.Merowchant_Meow])
+            }
+
+        }
+
+        merowchant_back_button.hidden = mode != .Merowchant
+        update_button(&merowchant_back_button)
+
+
+
+        ////////////////////////////////////////////////////////////////////////////////
+        //
+        // TODO.
+        //
+
+        if easel_canvas_back_button.pressed || (mode == .Easel && raylib.IsKeyPressed(.ESCAPE)) {
+            mode = .Main
+            raylib.PlaySound(global_asset_sounds[.Easel_Close])
+        }
+
+        if merowchant_back_button.pressed || (mode == .Merowchant && raylib.IsKeyPressed(.ESCAPE)) {
+            mode = .Main
+            raylib.PlaySound(global_asset_sounds[.Merowchant_Close])
         }
 
 
@@ -1641,6 +1740,155 @@ main :: proc() {
 
             ////////////////////////////////////////////////////////////////////////////////
             //
+            // Render easel canvas.
+            //
+
+            if mode == .Easel {
+
+                raylib.DrawTexturePro(
+                    texture = easel_canvas_texture,
+                    source  = {
+                        0.0,
+                        0.0,
+                        cast(f32) easel_canvas_texture.width,
+                        cast(f32) easel_canvas_texture.height,
+                    },
+                    dest     = easel_canvas_dest,
+                    origin   = easel_canvas_origin,
+                    rotation = 0.0,
+                    tint     = raylib.WHITE,
+                )
+
+                if hovered_easel_canvas_cell_is_within {
+
+                    raylib.DrawRectangleLines(
+                        posX   = i32((easel_canvas_dest.x - easel_canvas_origin.x + f32(hovered_easel_canvas_cell_coordinate_x) * easel_canvas_cell_dimensions.x)),
+                        posY   = i32((easel_canvas_dest.y - easel_canvas_origin.y + f32(hovered_easel_canvas_cell_coordinate_y) * easel_canvas_cell_dimensions.y)),
+                        width  = i32(easel_canvas_cell_dimensions.x),
+                        height = i32(easel_canvas_cell_dimensions.y),
+                        color  = raylib.BLACK,
+                    )
+
+                }
+
+                {
+
+                    builder := strings.builder_make(context.temp_allocator)
+                    defer strings.builder_destroy(&builder)
+
+                    fmt.sbprintf(&builder, "Request:\n")
+                    fmt.sbprintf(&builder, "flimsy friend\n")
+                    fmt.sbprintf(&builder, "\n")
+
+                    fmt.sbprintf(&builder, "Requirements:\n")
+
+                    if easel_canvas_requirement_painted_pixel_minimum >= 1 {
+                        fmt.sbprintf(&builder, "* At least {} painted pixels\n", easel_canvas_requirement_painted_pixel_minimum)
+                    }
+
+                    if easel_canvas_requirement_painted_pixel_maximum != 0 {
+                        fmt.sbprintf(&builder, "* At most {} painted pixels\n", easel_canvas_requirement_painted_pixel_maximum)
+                    }
+
+                    fmt.sbprintf(&builder, "\n")
+
+                    fmt.sbprintf(&builder, "Evaluation:\n")
+                    fmt.sbprintf(&builder, "There are {} painted pixels...\n", painted_pixel_count)
+
+                    requirement_text := strings.to_cstring(&builder)
+
+                    raylib.DrawTextEx(
+                        font     = global_asset_fonts[.Sniglet],
+                        text     = requirement_text,
+                        position = { 50, 150 },
+                        fontSize = 30,
+                        spacing  = 0,
+                        tint     = raylib.BLACK,
+                    )
+
+                }
+
+            }
+
+            render_button(easel_canvas_back_button)
+            render_button(easel_canvas_submit_button)
+
+
+
+            ////////////////////////////////////////////////////////////////////////////////
+            //
+            // Render Merowchant.
+            //
+
+            if mode == .Merowchant {
+
+                MEROWCHANT_TABLE_Y :: 400
+
+                raylib.DrawTexturePro(
+                    texture = global_asset_textures[.Merowchant_Background],
+                    source  = {
+                        0,
+                        0,
+                        cast(f32) global_asset_textures[.Merowchant_Background].width,
+                        cast(f32) global_asset_textures[.Merowchant_Background].height,
+                    },
+                    dest = {
+                        0,
+                        0,
+                        f32(raylib.GetScreenWidth()),
+                        MEROWCHANT_TABLE_Y + 100,
+                    },
+                    origin   = { 0, 0 },
+                    rotation = 0,
+                    tint     = raylib.WHITE,
+                )
+
+                raylib.DrawTexturePro(
+                    texture = global_asset_textures[.Merowchant_Cat],
+                    source  = {
+                        0,
+                        0,
+                        cast(f32) global_asset_textures[.Merowchant_Cat].width,
+                        cast(f32) global_asset_textures[.Merowchant_Cat].height,
+                    },
+                    dest = {
+                        merowchant_cat_position.x,
+                        merowchant_cat_position.y,
+                        merowchant_cat_dimensions.x,
+                        merowchant_cat_dimensions.y,
+                    },
+                    origin   = merowchant_cat_origin,
+                    rotation = 0,
+                    tint     = raylib.WHITE,
+                )
+
+                raylib.DrawTexturePro(
+                    texture = global_asset_textures[.Merowchant_Table],
+                    source  = {
+                        0,
+                        0,
+                        cast(f32) global_asset_textures[.Merowchant_Table].width,
+                        cast(f32) global_asset_textures[.Merowchant_Table].height,
+                    },
+                    dest = {
+                        0,
+                        MEROWCHANT_TABLE_Y,
+                        f32(raylib.GetScreenWidth()),
+                        f32(raylib.GetScreenHeight()) - MEROWCHANT_TABLE_Y,
+                    },
+                    origin   = { 0, 0 },
+                    rotation = 0,
+                    tint     = raylib.WHITE,
+                )
+
+            }
+
+            render_button(merowchant_back_button)
+
+
+
+            ////////////////////////////////////////////////////////////////////////////////
+            //
             // Render dialogue bubbles.
             //
 
@@ -1720,83 +1968,6 @@ main :: proc() {
                 )
 
             }
-
-
-
-            ////////////////////////////////////////////////////////////////////////////////
-            //
-            // Render easel canvas.
-            //
-
-            if mode == .Easel {
-
-                raylib.DrawTexturePro(
-                    texture = easel_canvas_texture,
-                    source  = {
-                        0.0,
-                        0.0,
-                        cast(f32) easel_canvas_texture.width,
-                        cast(f32) easel_canvas_texture.height,
-                    },
-                    dest     = easel_canvas_dest,
-                    origin   = easel_canvas_origin,
-                    rotation = 0.0,
-                    tint     = raylib.WHITE,
-                )
-
-                if hovered_easel_canvas_cell_is_within {
-
-                    raylib.DrawRectangleLines(
-                        posX   = i32((easel_canvas_dest.x - easel_canvas_origin.x + f32(hovered_easel_canvas_cell_coordinate_x) * easel_canvas_cell_dimensions.x)),
-                        posY   = i32((easel_canvas_dest.y - easel_canvas_origin.y + f32(hovered_easel_canvas_cell_coordinate_y) * easel_canvas_cell_dimensions.y)),
-                        width  = i32(easel_canvas_cell_dimensions.x),
-                        height = i32(easel_canvas_cell_dimensions.y),
-                        color  = raylib.BLACK,
-                    )
-
-                }
-
-                {
-
-                    builder := strings.builder_make(context.temp_allocator)
-                    defer strings.builder_destroy(&builder)
-
-                    fmt.sbprintf(&builder, "Request:\n")
-                    fmt.sbprintf(&builder, "flimsy friend\n")
-                    fmt.sbprintf(&builder, "\n")
-
-                    fmt.sbprintf(&builder, "Requirements:\n")
-
-                    if easel_canvas_requirement_painted_pixel_minimum >= 1 {
-                        fmt.sbprintf(&builder, "* At least {} painted pixels\n", easel_canvas_requirement_painted_pixel_minimum)
-                    }
-
-                    if easel_canvas_requirement_painted_pixel_maximum != 0 {
-                        fmt.sbprintf(&builder, "* At most {} painted pixels\n", easel_canvas_requirement_painted_pixel_maximum)
-                    }
-
-                    fmt.sbprintf(&builder, "\n")
-
-                    fmt.sbprintf(&builder, "Evaluation:\n")
-                    fmt.sbprintf(&builder, "There are {} painted pixels...\n", painted_pixel_count)
-
-                    requirement_text := strings.to_cstring(&builder)
-
-                    raylib.DrawTextEx(
-                        font     = global_asset_fonts[.Sniglet],
-                        text     = requirement_text,
-                        position = { 50, 150 },
-                        fontSize = 30,
-                        spacing  = 0,
-                        tint     = raylib.BLACK,
-                    )
-
-                }
-
-            }
-
-            render_button(easel_canvas_back_button)
-            render_button(easel_canvas_submit_button)
 
 
 
