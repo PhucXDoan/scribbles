@@ -269,79 +269,79 @@ render :: proc(rendering_tasks : []Rendering_Task) {
 
 
 
-            case Rendering_Task_Dialogue_Bubble: { // TODO Rework.
+            case Rendering_Task_Dialogue_Bubble: {
 
-                DIALOGUE_BUBBLE_FONT_SIZE :: 30
-                DIALOGUE_BUBBLE_PADDING   :: 15
-                DIALOGUE_BUBBLE_ROUNDNESS :: 0.3
-                DIALOGUE_BUBBLE_OUTLINE   :: 4
+                FONT_SIZE :: 30
+                PADDING   :: 15
+                ROUNDNESS :: 0.3
+                OUTLINE   :: 4
 
-                position := to_screen_for_position(task.position)
+                tip := to_screen_for_position(task.position)
 
                 measurement := raylib.MeasureTextEx(
                     font     = GLOBAL_asset_fonts[task.font],
                     text     = task.text,
-                    fontSize = DIALOGUE_BUBBLE_FONT_SIZE,
+                    fontSize = FONT_SIZE,
                     spacing  = 0,
                 )
 
-                bubble_rec := raylib.Rectangle {
-                    position.x - DIALOGUE_BUBBLE_PADDING / 2,
-                    position.y - DIALOGUE_BUBBLE_PADDING * 3 - measurement.y,
-                    measurement.x + DIALOGUE_BUBBLE_PADDING * 2,
-                    measurement.y + DIALOGUE_BUBBLE_PADDING * 2,
+                rec := raylib.Rectangle {
+                    tip.x         - PADDING / 2,
+                    tip.y         - PADDING * 3 - measurement.y,
+                    measurement.x + PADDING * 2,
+                    measurement.y + PADDING * 2,
                 }
 
                 vertices := [?][2]f32 {
-                    { position.x, bubble_rec.y + bubble_rec.height },
-                    { position.x, position.y },
-                    { position.x + (position.x - bubble_rec.x) * 2, bubble_rec.y + bubble_rec.height },
+                    { tip.x                      , rec.y + rec.height },
+                    { tip.x                      , tip.y              },
+                    { tip.x + (tip.x - rec.x) * 2, rec.y + rec.height },
                 }
 
-                raylib.DrawRectangleRoundedLinesEx(
-                    rec       = bubble_rec,
-                    roundness = DIALOGUE_BUBBLE_ROUNDNESS,
+                raylib.DrawRectangleRoundedLinesEx( // Dialogue bubble outline.
+                    rec       = rec,
+                    roundness = ROUNDNESS,
                     segments  = 0,
-                    lineThick = DIALOGUE_BUBBLE_OUTLINE,
+                    lineThick = OUTLINE,
                     color     = raylib.BLACK,
                 )
 
-                raylib.DrawTriangle(
+                raylib.DrawTriangle(                // Fill of the bubble tip.
                     v1       = vertices[0],
                     v2       = vertices[1],
                     v3       = vertices[2],
                     color    = raylib.LIGHTGRAY,
                 )
 
-                raylib.DrawLineEx(
+                raylib.DrawLineEx(                  // First side of the bubble tip's outline.
                     startPos = vertices[0],
                     endPos   = vertices[1],
-                    thick    = DIALOGUE_BUBBLE_OUTLINE,
+                    thick    = OUTLINE,
                     color    = raylib.BLACK,
                 )
 
-                raylib.DrawLineEx(
+                raylib.DrawLineEx(                  // Second side of the bubble tip's outline.
                     startPos = vertices[1],
                     endPos   = vertices[2],
-                    thick    = DIALOGUE_BUBBLE_OUTLINE,
+                    thick    = OUTLINE,
                     color    = raylib.BLACK,
                 )
 
-                raylib.DrawRectangleRounded(
-                    rec       = bubble_rec,
-                    roundness = DIALOGUE_BUBBLE_ROUNDNESS,
+                raylib.DrawRectangleRounded(        // Fill of the dialogue bubble.
+                    rec       = rec,
+                    roundness = ROUNDNESS,
                     segments  = 0,
                     color     = raylib.LIGHTGRAY,
                 )
 
-                raylib.DrawTextEx(
+                raylib.DrawTextEx(                  // Finally the dialogue bubble text itself.
                     font     = GLOBAL_asset_fonts[task.font],
                     text     = task.text,
                     position = {
-                        bubble_rec.x + DIALOGUE_BUBBLE_PADDING,
-                        bubble_rec.y + DIALOGUE_BUBBLE_PADDING,
+                        rec.x + PADDING,
+                        rec.y + PADDING,
                     },
-                    fontSize = DIALOGUE_BUBBLE_FONT_SIZE,
+                    fontSize = FONT_SIZE,
                     spacing  = 0,
                     tint     = raylib.BLACK,
                 )
