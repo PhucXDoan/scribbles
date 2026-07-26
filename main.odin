@@ -26,7 +26,7 @@ main :: proc() {
 
 
     when ODIN_DEBUG {
-        pack_global_assets()
+        create_global_asset_pack_file()
     }
 
     raylib.SetTraceLogLevel(.WARNING)
@@ -41,7 +41,7 @@ main :: proc() {
 
     raylib.SetExitKey(nil)
 
-    load_global_assets()
+    load_global_asset_pack_file()
 
 
 
