@@ -19,11 +19,15 @@ push_dynamic_array_element :: proc(array : ^[dynamic]$T, element : T) {
     assert(amount == 1)
 }
 
+
+
 memeq :: proc(lhs : $T, rhs : T) -> bool {
     lhs_copy := lhs
     rhs_copy := rhs
     return mem.compare_ptrs(&lhs_copy, &rhs_copy, size_of(T)) == 0
 }
+
+
 
 eat :: proc {
     eat_type,
