@@ -1,6 +1,10 @@
 package main
 
-import "core:mem"
+// This file just contains procedures that I wish were in Odin's built-in libraries.
+
+////////////////////////////////////////////////////////////////////////////////
+
+
 
 
 
@@ -45,9 +49,9 @@ eat_type :: proc(slice : ^[]u8, $T : typeid) -> ^T {
 
 }
 
-eat_bytes :: proc(slice : ^[]u8, length : int) -> []u8 {
+eat_bytes :: proc(slice : ^[]u8, length : $T) -> []u8 where intrinsics.type_is_integer(T) {
 
-    assert(len(slice) >= length)
+    assert(len(slice) >= int(length))
 
     result := slice[:length ]
     slice^  = slice[ length:]
@@ -55,3 +59,12 @@ eat_bytes :: proc(slice : ^[]u8, length : int) -> []u8 {
     return result
 
 }
+
+
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+
+import "core:mem"
+import "base:intrinsics"
