@@ -114,9 +114,89 @@ main :: proc() {
 
 
 
-    game_state, easel_canvas_image, easel_canvas_texture, entities := read_save()
+    entities := [dynamic; 16]Entity {
+        Entity_Kind.nil        = {},
+        Entity_Kind.Rolypoly   = {},
+        Entity_Kind.Easel      = {},
+        Entity_Kind.Merowchant = {},
+    }
+
+    entities[Entity_Kind.Rolypoly] = {
+        kind                  = .Rolypoly,
+        base_position         = { 0, 0 },
+        origin                = { 0, 0 },
+        base_dimensions       = { 1.5, 1 },
+        texture_reference     = .Rolypoly,
+        mouse_hover_animation = { duration = 0.1  },
+        mouse_click_animation = { duration = 0.25 },
+    }
+
+    entities[Entity_Kind.Easel] = {
+        kind                  = .Easel,
+        base_position         = { 7.5, -1 },
+        origin                = { 0, -1 },
+        base_dimensions       = { 1.5, 3 },
+        texture_reference     = .Easel,
+        mouse_hover_animation = { duration = 0.1 },
+        lock_hover_animation  = { duration = 0.1 },
+        mouse_click_animation = { duration = 0.1 },
+        locked                = {}, // Filled out later.
+        pet_cost              = 100,
+    }
+
+    entities[Entity_Kind.Merowchant] = Entity {
+        kind                  = .Merowchant,
+        base_position         = { -6, 1 },
+        origin                = { 0, -1 },
+        base_dimensions       = { 3, 3 },
+        texture_reference     = .Merowchant_Outside,
+        mouse_hover_animation = { duration = 0.1 },
+        lock_hover_animation  = { duration = 0.1 },
+        mouse_click_animation = { duration = 0.1 },
+        locked                = {}, // Filled out later.
+        pet_cost              = 9_999,
+    }
 
 
+
+
+
+    game_state, easel_canvas_image, duration_since_last_game := read_save(&entities)
+
+    when ODIN_DEBUG {
+        fmt.printf("About {} seconds since last game.\n\n", int(time.duration_seconds(duration_since_last_game)))
+    }
+
+    if easel_canvas_image == {} {
+        easel_canvas_image = raylib.GenImageColor(8, 8, EASEL_DEFAULT_COLOR)
+    }
+
+    easel_canvas_texture := raylib.LoadTextureFromImage(easel_canvas_image)
+
+
+
+    // Age the entities.
+
+    for &entity in entities {
+
+        #partial switch entity.kind {
+
+            case .Flimsy_Friend: {
+
+                duration_of_productivity := min( // TODO Generalize.
+                    duration_since_last_game,
+                    FLIMSY_FRIEND_LIFESPAN - min(FLIMSY_FRIEND_LIFESPAN, entity.age)
+                )
+
+                game_state.pets += u128(FLIMSY_FRIEND_EXPECTED_PETS_PER_SECOND * time.duration_seconds(duration_of_productivity))
+
+            }
+
+        }
+
+        entity.age += duration_since_last_game
+
+    }
 
 
     for {
