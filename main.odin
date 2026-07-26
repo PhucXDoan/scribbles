@@ -3,9 +3,7 @@ package main
 import "core:fmt"
 import "core:strings"
 import "core:math"
-import "core:math/ease"
 import "core:math/rand"
-import "core:reflect"
 import "core:os"
 import "core:mem"
 import "core:time"
@@ -19,435 +17,23 @@ main :: proc() {
 
     ////////////////////////////////////////////////////////////////////////////////
     //
-    // Buttons.
+    // Basic Initializations.
     //
-
-    Button :: struct {
-        center           : raylib.Vector2,
-        style            : Button_Style,
-        mouse_hover_tint : raylib.Color,
-        mouse_hovering   : bool,
-        pressed          : bool,
-        hidden           : bool,
-        disabled         : bool,
-    }
-
-    Button_Style :: union {
-        Button_Style_Lame,
-        Button_Style_Texture,
-    }
-
-    Button_Style_Lame :: struct {
-        text        : cstring,
-        font_handle : Global_Asset_Font_Handle,
-        font_size   : f32,
-    }
-
-    Button_Style_Texture :: struct {
-        dimensions     : raylib.Vector2,
-        texture_handle : Global_Asset_Texture_Handle,
-    }
-
-    BUTTON_STYLE_LAME_ROUNDNESS :: 0.2
-    BUTTON_STYLE_LAME_OUTLINE   :: 4
-    BUTTON_STYLE_LAME_PADDING   :: 4
-
-    update_button :: proc(button : ^Button) {
-
-        if button.hidden {
-
-            button.mouse_hovering = false
-
-        } else {
-
-            dest : raylib.Rectangle
-
-            switch style in button.style {
-
-                case Button_Style_Lame: {
-
-                    measurement := raylib.MeasureTextEx(
-                        font     = global_asset_fonts[style.font_handle],
-                        text     = style.text,
-                        fontSize = style.font_size,
-                        spacing  = 0,
-                    )
-
-                    dest = raylib.Rectangle {
-                        button.center.x - measurement.x / 2 - BUTTON_STYLE_LAME_PADDING,
-                        button.center.y - measurement.y / 2 - BUTTON_STYLE_LAME_PADDING,
-                        measurement.x + BUTTON_STYLE_LAME_PADDING * 2,
-                        measurement.y + BUTTON_STYLE_LAME_PADDING * 2,
-                    }
-
-                }
-
-                case Button_Style_Texture: {
-                    dest = {
-                        button.center.x - style.dimensions.x / 2,
-                        button.center.y - style.dimensions.y / 2,
-                        style.dimensions.x,
-                        style.dimensions.y,
-                    }
-                }
-
-                case: panic("Invalid.")
-
-            }
-
-            button.mouse_hovering = raylib.CheckCollisionPointRec(
-                raylib.GetMousePosition(),
-                dest,
-            )
-
-        }
-
-        button.pressed = (
-            !button.disabled &&
-            button.mouse_hovering &&
-            raylib.IsMouseButtonPressed(.LEFT)
-        )
-
-    }
-
-    render_button :: proc(button : Button) {
-
-        if !button.hidden {
-
-            tint := raylib.WHITE
-
-            if button.disabled {
-                tint = raylib.DARKGRAY
-            } else if button.mouse_hovering {
-                tint = button.mouse_hover_tint
-            }
-
-            switch style in button.style {
-
-                case Button_Style_Lame: {
-
-                    measurement := raylib.MeasureTextEx(
-                        font     = global_asset_fonts[style.font_handle],
-                        text     = style.text,
-                        fontSize = style.font_size,
-                        spacing  = 0,
-                    )
-
-                    rec := raylib.Rectangle {
-                        button.center.x - measurement.x / 2 - BUTTON_STYLE_LAME_PADDING,
-                        button.center.y - measurement.y / 2 - BUTTON_STYLE_LAME_PADDING,
-                        measurement.x + BUTTON_STYLE_LAME_PADDING * 2,
-                        measurement.y + BUTTON_STYLE_LAME_PADDING * 2,
-                    }
-
-                    raylib.DrawRectangleRoundedLinesEx(
-                        rec       = rec,
-                        roundness = BUTTON_STYLE_LAME_ROUNDNESS,
-                        segments  = 0,
-                        lineThick = BUTTON_STYLE_LAME_OUTLINE,
-                        color     = raylib.BLACK,
-                    )
-
-                    raylib.DrawRectangleRounded(
-                        rec       = rec,
-                        roundness = BUTTON_STYLE_LAME_ROUNDNESS,
-                        segments  = 0,
-                        color     = tint,
-                    )
-
-                    raylib.DrawTextEx(
-                        font     = global_asset_fonts[style.font_handle],
-                        text     = style.text,
-                        position = {
-                            button.center.x - measurement.x / 2,
-                            button.center.y - measurement.y / 2,
-                        },
-                        fontSize = style.font_size,
-                        spacing  = 0,
-                        tint     = raylib.BLACK,
-                    )
-
-                }
-
-                case Button_Style_Texture: {
-
-                    raylib.DrawTexturePro(
-                        texture = global_asset_textures[style.texture_handle],
-                        source  = {
-                            0,
-                            0,
-                            f32(global_asset_textures[style.texture_handle].width ),
-                            f32(global_asset_textures[style.texture_handle].height),
-                        },
-                        dest = {
-                            button.center.x,
-                            button.center.y,
-                            style.dimensions.x,
-                            style.dimensions.y,
-                        },
-                        origin = {
-                            style.dimensions.x / 2,
-                            style.dimensions.y / 2,
-                        },
-                        rotation = 0,
-                        tint     = tint,
-                    )
-
-                }
-
-                case: panic("Invalid.")
-
-            }
-
-        }
-
-    }
-
-
-
-
-
     ////////////////////////////////////////////////////////////////////////////////
-    //
-    // Entities.
-    //
 
-    FLIMSY_FRIEND_BASE_DIMENSIONS                 :: raylib.Vector2 { 35, 35 }
-    FLIMSY_FRIEND_CLICKS_TO_POP                   :: 5
-    FLIMSY_FRIEND_LIFESPAN                        :: 1 * time.Minute
-    FLIMSY_FRIEND_WALK_ANIMATION_DURATION_SECONDS :: 0.5
-    FLIMSY_FRIEND_EXPECTED_WALK_DELAY_SECONDS     :: 2.5
-    FLIMSY_FRIEND_EXPECTED_PETS_PER_SECOND        :: 1 / (FLIMSY_FRIEND_EXPECTED_WALK_DELAY_SECONDS + FLIMSY_FRIEND_WALK_ANIMATION_DURATION_SECONDS)
 
-    Entity_Texture_Reference :: union {
-        Global_Asset_Texture_Handle,
-        raylib.Texture,
+
+
+
+    when ODIN_DEBUG {
+        pack_global_assets()
     }
-
-    Main_Entity_Kind :: enum {
-
-        nil,
-
-        // Fixed entities.
-        Rolypoly,
-        Easel,
-        Merowchant,
-
-        // Volatile entities.
-        Flimsy_Friend,
-
-    }
-
-    Main_Entity :: struct {
-
-        kind                  : Main_Entity_Kind,
-        base_position         : raylib.Vector2,
-        origin                : raylib.Vector2,
-        base_dimensions       : raylib.Vector2,
-        texture_reference     : Entity_Texture_Reference,
-        mouse_hover_animation : Animation,
-        lock_hover_animation  : Animation,
-        mouse_click_animation : Animation,
-        death_animation       : Animation,
-        walk_animation        : Animation,
-        walk_displacement     : raylib.Vector2,
-        walk_delay            : f32,
-        locked                : bool,
-        age                   : time.Duration,
-        pet_cost              : u128,
-
-        mouse_hovering        : bool,
-        mouse_clicked         : bool,
-        click_count           : int,
-
-        rendering_position    : raylib.Vector2,
-        rendering_dimensions  : raylib.Vector2,
-
-    }
-
-    Dialogue_Bubble :: struct {
-        position    : raylib.Vector2,
-        message     : cstring,
-        font_handle : Global_Asset_Font_Handle,
-    }
-
-    create_flimsy_friend :: proc(
-        main_entities : ^[dynamic; 16]Main_Entity,
-        image         : raylib.Image,
-        age           : time.Duration,
-        position      : Maybe(raylib.Vector2),
-    ) {
-
-        base_position := position.? or_else {
-            cast(f32) raylib.GetScreenWidth()  * 0.1 + f32(len(main_entities)) * 100,
-            cast(f32) raylib.GetScreenHeight() * 0.7,
-        }
-
-        append(
-            main_entities,
-            Main_Entity {
-                kind                  = .Flimsy_Friend,
-                base_position         = base_position,
-                origin                = { 0.5, 1 },
-                base_dimensions       = FLIMSY_FRIEND_BASE_DIMENSIONS,
-                texture_reference     = raylib.LoadTextureFromImage(image),
-                mouse_hover_animation = { duration = 0.1                                           },
-                mouse_click_animation = { duration = 0.1                                           },
-                walk_animation        = { duration = FLIMSY_FRIEND_WALK_ANIMATION_DURATION_SECONDS },
-                age                   = age,
-            }
-        )
-
-    }
-
-
-
-
-
-    ////////////////////////////////////////////////////////////////////////////////
-    //
-    // Pack global assets.
-    //
-
-    Global_Asset_Texture_Handle :: enum u32 {
-        nil,
-        Submit_Button,
-        Rolypoly,
-        Easel,
-        Padlock,
-        Merowchant_Outside,
-        Merowchant_Table,
-        Merowchant_Background,
-        Merowchant_Cat,
-    }
-
-    GLOBAL_ASSET_SOUND_XYLO_COUNT  :: 3
-    GLOBAL_ASSET_SOUND_PAPER_COUNT :: 3
-    Global_Asset_Sound_Handle :: enum u32 {
-        nil,
-        Xylo_0,
-        Xylo_1,
-        Xylo_2,
-        Paper_0,
-        Paper_1,
-        Paper_2,
-        Padlock,
-        Padlock_Locked,
-        Padlock_Unlocked,
-        Easel_Open,
-        Easel_Close,
-        Tap,
-        Pop,
-        Merowchant_Open,
-        Merowchant_Close,
-        Merowchant_Meow,
-    }
-
-    Global_Asset_Font_Handle :: enum u32 {
-        nil     = 0,
-        Sniglet = 1,
-    }
-
-    #assert(size_of(Global_Asset_Pack_Header) == 32)
-    Global_Asset_Pack_Header :: union #no_nil {
-        [31]u8,
-        Global_Asset_Pack_Texture_Header,
-        Global_Asset_Pack_Sound_Header,
-        Global_Asset_Pack_Font_Header,
-    }
-
-    Global_Asset_Pack_Texture_Header :: struct #packed {
-        handle : Global_Asset_Texture_Handle,
-        length : u32,
-    }
-
-    Global_Asset_Pack_Sound_Header :: struct #packed {
-        handle : Global_Asset_Sound_Handle,
-        length : u32,
-    }
-
-    Global_Asset_Pack_Font_Header :: struct #packed {
-        handle : Global_Asset_Font_Handle,
-        length : u32,
-    }
-
-    GLOBAL_ASSET_PACK_FILE_PATH :: "./media/Global_Asset_Pack.bin"
-
-    when ODIN_DEBUG {{
-
-        global_asset_pack_file_handle := os.open(GLOBAL_ASSET_PACK_FILE_PATH, os.O_CREATE | os.O_TRUNC | os.O_APPEND) or_else panic("Failed.")
-        defer os.close(global_asset_pack_file_handle)
-
-        pack_asset_type(Global_Asset_Texture_Handle, Global_Asset_Pack_Texture_Header, global_asset_pack_file_handle)
-        pack_asset_type(Global_Asset_Sound_Handle  , Global_Asset_Pack_Sound_Header  , global_asset_pack_file_handle)
-        pack_asset_type(Global_Asset_Font_Handle   , Global_Asset_Pack_Font_Header   , global_asset_pack_file_handle)
-
-        pack_asset_type :: proc(
-            $Global_Asset_ABC_Handle : typeid,
-            $Global_Asset_ABC_Header : typeid,
-            pack_file_handle         : ^os.File
-        ) {
-
-            for asset_handle, asset_handle_i in Global_Asset_ABC_Handle {
-
-                if asset_handle == nil {
-                    continue
-                }
-
-                when Global_Asset_ABC_Handle == Global_Asset_Texture_Handle {
-                    EXTENSION :: "png"
-                } else when Global_Asset_ABC_Handle == Global_Asset_Sound_Handle {
-                    EXTENSION :: "wav"
-                } else when Global_Asset_ABC_Handle == Global_Asset_Font_Handle {
-                    EXTENSION :: "ttf"
-                }
-
-                asset_file_path := fmt.tprintf("./media/{}.{}", reflect.enum_string(asset_handle), EXTENSION)
-
-                fmt.printf(
-                    "[{}/{}] Packing abc '{}' from file path '{}'...\n",
-                    asset_handle_i,
-                    len(Global_Asset_ABC_Handle) - 1,
-                    asset_handle,
-                    asset_file_path,
-                )
-
-                asset_file_data := os.read_entire_file(asset_file_path, context.temp_allocator) or_else panic("Failed.")
-
-                header : Global_Asset_Pack_Header = Global_Asset_ABC_Header {
-                    handle = asset_handle,
-                    length = u32(len(asset_file_data)),
-                }
-
-                _ = os.write(pack_file_handle, mem.any_to_bytes(header)) or_else panic("Failed.")
-                _ = os.write(pack_file_handle, asset_file_data         ) or_else panic("Failed.")
-
-            }
-
-            fmt.printf("\n")
-
-        }
-
-    }}
-
-
-
-
-
-    ////////////////////////////////////////////////////////////////////////////////
-    //
-    // Set up Raylib.
-    //
 
     raylib.SetTraceLogLevel(.WARNING)
     raylib.SetTargetFPS(60)
     raylib.SetConfigFlags({ .MSAA_4X_HINT })
 
-    raylib.InitWindow(
-        1200,
-        675,
-        "scribbles"
-    )
+    raylib.InitWindow(1200, 675, "scribbles")
     defer raylib.CloseWindow()
 
     raylib.InitAudioDevice()
@@ -455,110 +41,131 @@ main :: proc() {
 
     raylib.SetExitKey(nil)
 
+    load_global_assets()
 
 
 
+    Scene :: enum {
+        Main,
+        Easel,
+        Merowchant,
+    }
 
-    ////////////////////////////////////////////////////////////////////////////////
-    //
-    // Load global assets.
-    //
+    scene                                          := Scene.Main
+    SAVE_FILE_PATH                                 :: "./scribbles.save"
+    EASEL_DEFAULT_COLOR                            :: raylib.Color { 234, 240, 243, 255 }
+    game_state                                     :  Game_State_V1
+    easel_canvas_image                             :  raylib.Image
+    easel_canvas_texture                           :  raylib.Texture
+    easel_canvas_requirement_painted_pixel_minimum := 10
+    easel_canvas_requirement_painted_pixel_maximum := 0
+    merowchant_cat_hover_animation                 := Animation { duration = 0.1 }
+    duration_since_last_game                       :  time.Duration
 
-    @(static) global_asset_textures : [Global_Asset_Texture_Handle]raylib.Texture
-    @(static) global_asset_sounds   : [Global_Asset_Sound_Handle  ]raylib.Sound
-    @(static) global_asset_fonts    : [Global_Asset_Font_Handle   ]raylib.Font
+    entities := [dynamic; 16]Entity {
+        Entity_Kind.nil        = {},
+        Entity_Kind.Rolypoly   = {},
+        Entity_Kind.Easel      = {},
+        Entity_Kind.Merowchant = {},
+    }
 
-    {
+    entities[Entity_Kind.Rolypoly] = {
+        kind                  = .Rolypoly,
+        base_position         = { 0, 0 },
+        origin                = { 0, 0 },
+        base_dimensions       = { 1.5, 1 },
+        texture_reference     = .Rolypoly,
+        mouse_hover_animation = { duration = 0.1  },
+        mouse_click_animation = { duration = 0.25 },
+    }
 
-        when ODIN_DEBUG {
+    entities[Entity_Kind.Easel] = {
+        kind                  = .Easel,
+        base_position         = { 7.5, -1 },
+        origin                = { 0, -1 },
+        base_dimensions       = { 1.5, 3 },
+        texture_reference     = .Easel,
+        mouse_hover_animation = { duration = 0.1 },
+        lock_hover_animation  = { duration = 0.1 },
+        mouse_click_animation = { duration = 0.1 },
+        locked                = {}, // Filled out later.
+        pet_cost              = 100,
+    }
 
-            // Load the local asset pack file.
-            remaining_global_asset_pack_data := os.read_entire_file(GLOBAL_ASSET_PACK_FILE_PATH, context.temp_allocator) or_else panic("Failed.")
+    entities[Entity_Kind.Merowchant] = Entity {
+        kind                  = .Merowchant,
+        base_position         = { -6, 1 },
+        origin                = { 0, -1 },
+        base_dimensions       = { 3, 3 },
+        texture_reference     = .Merowchant_Outside,
+        mouse_hover_animation = { duration = 0.1 },
+        lock_hover_animation  = { duration = 0.1 },
+        mouse_click_animation = { duration = 0.1 },
+        locked                = {}, // Filled out later.
+        pet_cost              = 9_999,
+    }
 
-        } else {
+    merowchant_back_button := Button_Widget {
 
-            // Bake the local asset pack file into the executable.
-            @(static)
-            remaining_global_asset_pack_data := #load(GLOBAL_ASSET_PACK_FILE_PATH)
+        position = Rendering_Vector2_UV { -0.9, -0.9 },
 
-        }
+        style = Button_Widget_Style_Lame {
+            text = "Back",
+            font = .Sniglet,
+            size = 30,
+        },
 
-        for len(remaining_global_asset_pack_data) >= 1 {
+        mouse_hover_tint = raylib.GREEN,
 
-            global_asset_pack_header := eat(&remaining_global_asset_pack_data, Global_Asset_Pack_Header)
+    }
 
-            switch header in global_asset_pack_header {
+    easel_canvas_back_button := Button_Widget {
 
+        position = Rendering_Vector2_UV { -0.15, -0.7 },
 
+        style = Button_Widget_Style_Lame {
+            text = "Back",
+            font = .Sniglet,
+            size = 30,
+        },
 
-                // Load global textures.
+        mouse_hover_tint = raylib.GREEN,
 
-                case Global_Asset_Pack_Texture_Header: {
+    }
 
-                    image_data := eat(&remaining_global_asset_pack_data, int(header.length))
+    easel_canvas_submit_button := Button_Widget {
 
-                    global_asset_image := raylib.LoadImageFromMemory(".png", raw_data(image_data), i32(len(image_data)))
-                    defer raylib.UnloadImage(global_asset_image)
+        position = Rendering_Vector2_UV { 0.15, -0.7 },
 
-                    assert(header.handle != nil)
-                    assert(int(header.handle) < len(global_asset_textures))
-                    assert(global_asset_textures[header.handle] == {})
+        style = Button_Widget_Style_Texture {
+            dimensions = Rendering_Vector2_Cartesian { 0.075, 0.035 },
+            reference  = .Submit_Button,
+        },
 
-                    global_asset_textures[header.handle] = raylib.LoadTextureFromImage(global_asset_image)
+        mouse_hover_tint = raylib.GREEN,
 
-                }
+    }
 
-
-
-                // Load global sounds.
-
-                case Global_Asset_Pack_Sound_Header: {
-
-                    sound_data := eat(&remaining_global_asset_pack_data, int(header.length))
-
-                    global_asset_wave := raylib.LoadWaveFromMemory(".wav", raw_data(sound_data), i32(len(sound_data)))
-                    defer raylib.UnloadWave(global_asset_wave)
-
-                    assert(header.handle != nil)
-                    assert(int(header.handle) < len(global_asset_sounds))
-                    assert(global_asset_sounds[header.handle] == {})
-
-                    global_asset_sounds[header.handle] = raylib.LoadSoundFromWave(global_asset_wave)
-
-                }
-
-
-
-                // Load global fonts.
-
-                case Global_Asset_Pack_Font_Header: {
-
-                    font_data := eat(&remaining_global_asset_pack_data, int(header.length))
-
-                    assert(header.handle != nil)
-                    assert(int(header.handle) < len(global_asset_fonts))
-                    assert(global_asset_fonts[header.handle] == {})
-
-                    global_asset_fonts[header.handle] = raylib.LoadFontFromMemory(
-                        fileType       = ".ttf",
-                        fileData       = raw_data(font_data),
-                        dataSize       = i32(len(font_data)),
-                        fontSize       = 96,
-                        codepoints     = nil,
-                        codepointCount = 0,
-                    )
-
-                }
-
-
-
-                case [31]u8 : panic("Invalid.")
-                case        : panic("Invalid.")
-
-            }
-
-        }
-
+    create_flimsy_friend :: proc(
+        entities : ^[dynamic; 16]Entity,
+        image    : raylib.Image,
+        age      : time.Duration,
+        position : Maybe(World_Vector2),
+    ) {
+        append(entities, Entity {
+            kind          = .Flimsy_Friend,
+            base_position = position.? or_else {
+                -5 + f32(len(entities)) * 1,
+                -4,
+            },
+            origin                = { 0, -1 },
+            base_dimensions       = { 0.5, 0.5 },
+            texture_reference     = raylib.LoadTextureFromImage(image),
+            mouse_hover_animation = { duration = 0.1                                           },
+            mouse_click_animation = { duration = 0.1                                           },
+            walk_animation        = { duration = FLIMSY_FRIEND_WALK_ANIMATION_DURATION_SECONDS },
+            age                   = age,
+        })
     }
 
 
@@ -567,10 +174,13 @@ main :: proc() {
 
     ////////////////////////////////////////////////////////////////////////////////
     //
-    // Load local save-file.
+    // Local Save File Format and Loading.
     //
+    ////////////////////////////////////////////////////////////////////////////////
 
-    SAVE_FILE_PATH :: "./scribbles.save"
+
+
+
 
     #assert(size_of(Save_File_Header) == 32)
     Save_File_Header :: union #no_nil {
@@ -593,363 +203,295 @@ main :: proc() {
         version      : u8,
         image_length : u32,
         age          : time.Duration,
-        position     : Maybe(raylib.Vector2),
+        position     : Maybe(World_Vector2),
     }
 
-    #assert(size_of(Game_State) == 256)
-    Game_State :: union #no_nil {
+
+
+    #assert(size_of(Game_State_Vx) == 256)
+    Game_State_Vx :: union #no_nil {
         [255]u8,
         Game_State_V1,
     }
 
     Game_State_V1 :: struct #packed {
-        pets                : u128,
-        easel_unlocked      : b8,
-        save_timestamp      : Maybe(time.Time),
-        merowchant_unlocked : b8,
+        pets                     : u128,
+        SAVE_easel_unlocked      : b8,
+        SAVE_timestamp           : Maybe(time.Time),
+        SAVE_merowchant_unlocked : b8,
     }
 
-    EASEL_DEFAULT_COLOR      :: raylib.Color { 234, 240, 243, 255 }
-    game_state               :  Game_State_V1
-    easel_canvas_image       :  raylib.Image
-    duration_since_last_game :  time.Duration
 
-    main_entities := [dynamic; 16]Main_Entity {
 
-        Main_Entity_Kind.nil = {},
-
-        Main_Entity_Kind.Rolypoly = {
-            kind          = .Rolypoly,
-            base_position = {
-                cast(f32) raylib.GetScreenWidth()  * 0.5,
-                cast(f32) raylib.GetScreenHeight() * 0.5,
-            },
-            origin                = { 0.5, 0.5 },
-            base_dimensions       = { 75, 50 },
-            texture_reference     = .Rolypoly,
-            mouse_hover_animation = { duration = 0.1  },
-            mouse_click_animation = { duration = 0.25 },
-        },
-
-        Main_Entity_Kind.Easel = {
-            kind          = .Easel,
-            base_position = {
-                cast(f32) raylib.GetScreenWidth()  * 0.85,
-                cast(f32) raylib.GetScreenHeight() * 0.6,
-            },
-            origin                = { 0.5, 1 },
-            base_dimensions       = { 100, 200 },
-            texture_reference     = .Easel,
-            mouse_hover_animation = { duration = 0.1 },
-            lock_hover_animation  = { duration = 0.1 },
-            mouse_click_animation = { duration = 0.1 },
-            locked                = {}, // Filled out later.
-            pet_cost              = 100,
-        },
-
-        Main_Entity_Kind.Merowchant = Main_Entity {
-            kind          = .Merowchant,
-            base_position = {
-                cast(f32) raylib.GetScreenWidth()  * 0.25,
-                cast(f32) raylib.GetScreenHeight() * 0.35,
-            },
-            origin                = { 0.5, 1 },
-            base_dimensions       = { 175, 175 },
-            texture_reference     = .Merowchant_Outside,
-            mouse_hover_animation = { duration = 0.1 },
-            lock_hover_animation  = { duration = 0.1 },
-            mouse_click_animation = { duration = 0.1 },
-            locked                = true,
-            pet_cost              = 9_999,
-        },
-
-    }
+    // Load local save file.
 
     {
 
-        remaining_save_file_data, save_file_reading_error := os.read_entire_file(SAVE_FILE_PATH, context.temp_allocator)
+        stream, error := os.read_entire_file(SAVE_FILE_PATH, context.temp_allocator)
 
-        if save_file_reading_error == nil {
+        if error != nil {
+            when ODIN_DEBUG {
+                fmt.printf("Local Save File: {}.\n\n", error)
+            }
+        }
 
-            for len(remaining_save_file_data) >= 1 {
+        for len(stream) >= 1 {
 
-                save_file_header := eat(&remaining_save_file_data, Save_File_Header)
+            save_file_header := eat(&stream, Save_File_Header)
 
-                switch header in save_file_header {
+            switch header in save_file_header {
 
 
 
-                    // Load game state.
+                // Load game state.
 
-                    case Save_File_Header_Game_State: {
+                case Save_File_Header_Game_State: {
 
-                        assert(header.version <= 1)
+                    assert(game_state == {})
+                    assert(header.version <= 1)
 
-                        save_game_state := eat(&remaining_save_file_data, Game_State)
+                    saved_game_state := eat(&stream, Game_State_Vx)
 
-                        switch state in save_game_state {
+                    switch state in saved_game_state {
 
-                            case Game_State_V1: {
-                                assert(game_state == {})
-                                game_state = state
-                            }
-
-                            case [255]u8 : panic("Invalid.")
-                            case         : panic("Invalid.")
-
+                        case Game_State_V1: {
+                            game_state = state
                         }
 
-                    }
-
-
-
-                    // Load easel canvas image.
-
-                    case Save_File_Header_Easel_Canvas_Image: {
-
-                        assert(header.version <= 1)
-
-                        image_data := eat(&remaining_save_file_data, int(header.length))
-
-                        easel_canvas_image = raylib.LoadImageFromMemory(".png", raw_data(image_data), i32(len(image_data)))
+                        case [255]u8 : panic("Invalid.")
+                        case         : panic("Invalid.")
 
                     }
-
-
-
-                    // Load flimsy friend.
-
-                    case Save_File_Header_Flimsy_Friend: {
-
-                        assert(header.version <= 1)
-
-                        image_data := eat(&remaining_save_file_data, int(header.image_length))
-
-                        image := raylib.LoadImageFromMemory(".png", raw_data(image_data), i32(len(image_data)))
-                        defer raylib.UnloadImage(image)
-
-                        create_flimsy_friend(
-                            main_entities = &main_entities,
-                            image         = image,
-                            age           = header.age,
-                            position      = header.position,
-                        )
-
-                    }
-
-
-
-                    case [31]u8 : panic("Invalid.")
-                    case        : panic("Invalid.")
 
                 }
 
-            }
 
-        }
 
-        main_entities[Main_Entity_Kind.Easel     ].locked = !game_state.easel_unlocked
-        main_entities[Main_Entity_Kind.Merowchant].locked = !game_state.merowchant_unlocked
+                // Load easel canvas image.
 
-        if easel_canvas_image == {} {
-            easel_canvas_image = raylib.GenImageColor(8, 8, EASEL_DEFAULT_COLOR)
-        }
+                case Save_File_Header_Easel_Canvas_Image: {
 
-        duration_since_last_game = time.diff(game_state.save_timestamp.? or_else time.now(), time.now())
+                    assert(easel_canvas_image == {})
+                    assert(header.version <= 1)
 
-        when ODIN_DEBUG {
-            fmt.printf("About {} seconds since last game.\n\n", int(time.duration_seconds(duration_since_last_game)))
-        }
-
-        for &entity in main_entities {
-
-            #partial switch entity.kind {
-
-                case .Flimsy_Friend: {
-
-                    duration_of_productivity := clamp(duration_since_last_game, 0, FLIMSY_FRIEND_LIFESPAN - entity.age)
-
-                    game_state.pets += u128(FLIMSY_FRIEND_EXPECTED_PETS_PER_SECOND * time.duration_seconds(duration_of_productivity))
+                    image_data         := eat(&stream, int(header.length))
+                    easel_canvas_image  = raylib.LoadImageFromMemory(".png", raw_data(image_data), i32(len(image_data)))
 
                 }
 
-            }
 
-            entity.age += duration_since_last_game
+
+                // Load Flimsy Friend.
+
+                case Save_File_Header_Flimsy_Friend: {
+
+                    assert(header.version <= 1)
+
+                    image_data := eat(&stream, int(header.image_length))
+                    image      := raylib.LoadImageFromMemory(".png", raw_data(image_data), i32(len(image_data)))
+                    defer raylib.UnloadImage(image)
+
+                    create_flimsy_friend(
+                        entities = &entities,
+                        image    = image,
+                        age      = header.age,
+                        position = header.position,
+                    )
+
+                }
+
+
+
+                case [31]u8 : panic("Invalid.")
+                case        : panic("Invalid.")
+
+            }
 
         }
 
     }
 
-    save_game :: proc(game_state : ^Game_State_V1, easel_canvas_image : raylib.Image, main_entities : []Main_Entity) {
-
-        fmt.printf("Saving to '{}'...\n", SAVE_FILE_PATH)
-
-        save_file_handle := os.open(SAVE_FILE_PATH, os.O_CREATE | os.O_TRUNC | os.O_APPEND) or_else panic("Failed.")
-        defer os.close(save_file_handle)
 
 
+    // Determine passage of time.
 
-        // Save some game state info.
+    duration_since_last_game = time.diff(game_state.SAVE_timestamp.? or_else time.now(), time.now())
 
-        game_state.save_timestamp      = time.now()
-        game_state.easel_unlocked      = !main_entities[Main_Entity_Kind.Easel     ].locked
-        game_state.merowchant_unlocked = !main_entities[Main_Entity_Kind.Merowchant].locked
+    when ODIN_DEBUG {
+        fmt.printf("About {} seconds since last game.\n\n", int(time.duration_seconds(duration_since_last_game)))
+    }
 
 
 
-        // Save game state.
+    // Handle lock status.
 
-        {
+    entities[Entity_Kind.Easel     ].locked = !game_state.SAVE_easel_unlocked
+    entities[Entity_Kind.Merowchant].locked = !game_state.SAVE_merowchant_unlocked
 
-            save_file_header : Save_File_Header = Save_File_Header_Game_State {
-                version = 1,
+
+
+    // Handle canvas image and texture.
+
+    if easel_canvas_image == {} {
+        easel_canvas_image = raylib.GenImageColor(8, 8, EASEL_DEFAULT_COLOR)
+    }
+
+    easel_canvas_texture = raylib.LoadTextureFromImage(easel_canvas_image)
+
+
+
+    // Age the entities.
+
+    for &entity in entities {
+
+        #partial switch entity.kind {
+
+            case .Flimsy_Friend: {
+
+                duration_of_productivity := min( // TODO Generalize.
+                    duration_since_last_game,
+                    FLIMSY_FRIEND_LIFESPAN - min(FLIMSY_FRIEND_LIFESPAN, entity.age)
+                )
+
+                game_state.pets += u128(FLIMSY_FRIEND_EXPECTED_PETS_PER_SECOND * time.duration_seconds(duration_of_productivity))
+
             }
-
-            save_game_state : Game_State = game_state^
-
-            _ = os.write(save_file_handle, mem.any_to_bytes(save_file_header)) or_else panic("Failed.")
-            _ = os.write(save_file_handle, mem.any_to_bytes(save_game_state )) or_else panic("Failed.")
 
         }
 
-
-
-        // Save easel canvas image.
-
-        if easel_canvas_image != {} {
-
-            image_length : i32
-            image_data   := raylib.ExportImageToMemory(easel_canvas_image, ".png", &image_length)
-            defer raylib.MemFree(image_data)
-
-            save_file_header : Save_File_Header = Save_File_Header_Easel_Canvas_Image {
-                version = 1,
-                length  = u32(image_length),
-            }
-
-            _ = os.write    (save_file_handle, mem.any_to_bytes(save_file_header)) or_else panic("Failed.")
-            _ = os.write_ptr(save_file_handle, image_data, int(image_length)     ) or_else panic("Failed.")
-
-        }
-
-
-
-        // Save flimsy friends.
-
-        for entity in main_entities {
-
-            if entity.kind != .Flimsy_Friend {
-                continue
-            }
-
-            image := raylib.LoadImageFromTexture(entity.texture_reference.(raylib.Texture))
-            defer raylib.UnloadImage(image)
-
-            image_length : i32
-            image_data   := raylib.ExportImageToMemory(image, ".png", &image_length)
-            defer raylib.MemFree(image_data)
-
-            save_file_header : Save_File_Header = Save_File_Header_Flimsy_Friend {
-                version      = 1,
-                image_length = u32(image_length),
-                age          = entity.age,
-                position     = entity.base_position,
-            }
-
-            _ = os.write    (save_file_handle, mem.any_to_bytes(save_file_header)) or_else panic("Failed.")
-            _ = os.write_ptr(save_file_handle, image_data, int(image_length)     ) or_else panic("Failed.")
-
-        }
+        entity.age += duration_since_last_game
 
     }
 
-    save_game(&game_state, easel_canvas_image, main_entities[:])
 
 
 
-
-
-    ////////////////////////////////////////////////////////////////////////////////
-    //
-    // Main loop.
-    //
-
-    Mode :: enum {
-        Main,
-        Easel,
-        Merowchant,
-    }
-
-    mode                                           := Mode.Main
-    easel_canvas_texture                           := raylib.LoadTextureFromImage(easel_canvas_image)
-    easel_canvas_requirement_painted_pixel_minimum := 10
-    easel_canvas_requirement_painted_pixel_maximum := 0
-    merowchant_cat_hover_animation                 := Animation { duration = 0.1 }
-
-    merowchant_back_button := Button {
-
-        center = {
-            f32(raylib.GetScreenWidth() ) * 0.05,
-            f32(raylib.GetScreenHeight()) * 0.95,
-        },
-
-        style = Button_Style_Lame {
-            text        = "Back",
-            font_handle = .Sniglet,
-            font_size   = 30,
-        },
-
-        mouse_hover_tint = raylib.GREEN,
-
-    }
-
-    easel_canvas_back_button := Button {
-
-        center = {
-            f32(raylib.GetScreenWidth() ) * 0.45,
-            f32(raylib.GetScreenHeight()) * 0.85,
-        },
-
-        style = Button_Style_Lame {
-            text        = "Back",
-            font_handle = .Sniglet,
-            font_size   = 30,
-        },
-
-        mouse_hover_tint = raylib.GREEN,
-
-    }
-
-    easel_canvas_submit_button := Button {
-
-        center = {
-            f32(raylib.GetScreenWidth() ) * 0.55,
-            f32(raylib.GetScreenHeight()) * 0.85,
-        },
-
-        style = Button_Style_Texture {
-            dimensions     = { 100, 50 },
-            texture_handle = .Submit_Button,
-        },
-
-        mouse_hover_tint = raylib.GREEN,
-
-    }
 
     for {
+
+
+
+
+
+        ////////////////////////////////////////////////////////////////////////////////
+        //
+        // Game Saving.
+        //
+        ////////////////////////////////////////////////////////////////////////////////
+
+
+
+
+
+        @(static)
+        should_save_game  := true // Always save the game on start up.
+        should_close      := raylib.WindowShouldClose()
+        should_save_game ||= should_close || time.diff(game_state.SAVE_timestamp.? or_else {}, time.now()) >= 60 * time.Second
+
+        if should_save_game {
+
+            should_save_game = false
+
+            when ODIN_DEBUG {
+                fmt.printf("Saving to '{}'...\n", SAVE_FILE_PATH)
+            }
+
+            save_file_handle := os.open(SAVE_FILE_PATH, os.O_CREATE | os.O_TRUNC | os.O_APPEND) or_else panic("Failed.")
+            defer os.close(save_file_handle)
+
+
+
+            // Update game state's save info.
+
+            game_state.SAVE_timestamp = time.now()
+            game_state.SAVE_easel_unlocked      = !entities[Entity_Kind.Easel     ].locked
+            game_state.SAVE_merowchant_unlocked = !entities[Entity_Kind.Merowchant].locked
+
+
+
+            // Save the game state.
+
+            {
+
+                header : Save_File_Header = Save_File_Header_Game_State {
+                    version = 1,
+                }
+
+                body : Game_State_Vx = game_state
+
+                _ = os.write(save_file_handle, mem.any_to_bytes(header)) or_else panic("Failed.")
+                _ = os.write(save_file_handle, mem.any_to_bytes(body  )) or_else panic("Failed.")
+
+            }
+
+
+
+            // Save easel canvas image.
+
+            if easel_canvas_image != {} {
+
+                image_length : i32
+                image_data   := raylib.ExportImageToMemory(easel_canvas_image, ".png", &image_length)
+                defer raylib.MemFree(image_data)
+
+                header : Save_File_Header = Save_File_Header_Easel_Canvas_Image {
+                    version = 1,
+                    length  = u32(image_length),
+                }
+
+                _ = os.write    (save_file_handle, mem.any_to_bytes(header)     ) or_else panic("Failed.")
+                _ = os.write_ptr(save_file_handle, image_data, int(image_length)) or_else panic("Failed.")
+
+            }
+
+
+
+            // Save entities.
+
+            for entity in entities {
+
+                #partial switch entity.kind {
+
+                    case .Flimsy_Friend: {
+
+                        image := raylib.LoadImageFromTexture(entity.texture_reference.(raylib.Texture))
+                        defer raylib.UnloadImage(image)
+
+                        image_length : i32
+                        image_data   := raylib.ExportImageToMemory(image, ".png", &image_length)
+                        defer raylib.MemFree(image_data)
+
+                        header : Save_File_Header = Save_File_Header_Flimsy_Friend {
+                            version      = 1,
+                            image_length = u32(image_length),
+                            age          = entity.age,
+                            position     = entity.base_position,
+                        }
+
+                        _ = os.write    (save_file_handle, mem.any_to_bytes(header)     ) or_else panic("Failed.")
+                        _ = os.write_ptr(save_file_handle, image_data, int(image_length)) or_else panic("Failed.")
+
+                    }
+
+                }
+
+            }
+
+        }
+
+
+
+
 
         ////////////////////////////////////////////////////////////////////////////////
         //
         // Miscellaneous.
         //
+        ////////////////////////////////////////////////////////////////////////////////
 
-        should_close                 := raylib.WindowShouldClose()
-        seconds_since_last_save_game := time.duration_seconds(time.diff(game_state.save_timestamp.? or_else time.now(), time.now()))
 
-        if should_close || seconds_since_last_save_game >= 60 {
-            save_game(&game_state, easel_canvas_image, main_entities[:])
-        }
+
+
 
         if should_close {
             break
@@ -957,20 +499,107 @@ main :: proc() {
 
         mouse_position := raylib.GetMousePosition()
 
-        dialogue_bubbles : [dynamic; 32]Dialogue_Bubble
+        rendering_tasks : [dynamic; 32]Rendering_Task
+
+
 
 
 
         ////////////////////////////////////////////////////////////////////////////////
         //
-        // Update entities.
+        // Entity Update.
         //
+        ////////////////////////////////////////////////////////////////////////////////
 
-        to_be_removed_main_entities : [dynamic; cap(main_entities)]int
 
-        for &entity, entity_i in main_entities {
+
+
+
+        to_be_removed_entities :  [dynamic; cap(entities)]int
+        new_pets_for_rolypoly  := u128(0)
+
+        for &entity, entity_i in entities {
+
+            if entity_i == 0 {
+                continue // Skip the nil entity.
+            }
 
             should_be_removed := false
+
+
+
+            // Determine rendering dimensions.
+
+            {
+
+                rendering_dimensions := Rendering_Vector2_Cartesian {
+                    entity.base_dimensions.x * 0.1 / 2,
+                    entity.base_dimensions.y * 0.1 / 2,
+                }
+
+                if !entity.locked {
+
+                    rendering_dimensions.x *= ease_animation(1, 1.025, entity.mouse_hover_animation, .Cubic_Out)
+                    rendering_dimensions.y *= ease_animation(1, 1.025, entity.mouse_hover_animation, .Cubic_Out)
+
+                    if entity.mouse_click_animation.running {
+                        rendering_dimensions.x /= ease_animation(1.2, 1, entity.mouse_click_animation, .Quartic_Out)
+                        rendering_dimensions.y *= ease_animation(1.2, 1, entity.mouse_click_animation, .Cubic_Out  )
+                    }
+
+                }
+
+                if entity.walk_animation.running {
+                    rendering_dimensions.x /= 1 + 0.5 * math.sin(ease_animation(0, math.PI, entity.walk_animation, .Quartic_In_Out))
+                    rendering_dimensions.y *= 1 + 0.2 * math.sin(ease_animation(0, math.PI, entity.walk_animation, .Quartic_In_Out))
+                }
+
+                if entity.death_animation.running {
+                    rendering_dimensions.x *= ease_animation(1, 2, entity.death_animation, .Quartic_In)
+                    rendering_dimensions.y *= ease_animation(1, 2, entity.death_animation, .Quartic_In)
+                }
+
+                entity.rendering_dimensions = rendering_dimensions
+
+            }
+
+
+
+            // Determine rendering position.
+
+            {
+
+                rendering_position := Rendering_Vector2_Cartesian {
+                    entity.base_position.x * 0.1,
+                    entity.base_position.y * 0.1,
+                }
+
+                if entity.walk_animation.running {
+
+                    destination := World_Vector2 {
+                        (entity.base_position.x + entity.walk_displacement.x) * 0.1,
+                        ((entity.base_position.y + entity.walk_displacement.y) + 0.5 * math.pow(math.sin(entity.walk_animation.value * math.PI), 8)) * 0.1,
+                    }
+
+                    rendering_position.x = ease_animation(rendering_position.x, destination.x, entity.walk_animation, .Quartic_In_Out)
+                    rendering_position.y = ease_animation(rendering_position.y, destination.y, entity.walk_animation, .Quartic_In_Out)
+
+                }
+
+                entity.rendering_position = rendering_position
+
+            }
+
+
+
+            // With the rendering position and dimensions determined,
+            // we know the screen bounding box of the entity.
+
+            bounding_box := to_screen_for_rectangle(
+                entity.rendering_position,
+                entity.rendering_dimensions,
+                entity.origin,
+            )
 
 
 
@@ -979,6 +608,8 @@ main :: proc() {
             entity.age += time.Duration(raylib.GetFrameTime() * f32(time.Second))
 
             #partial switch entity.kind {
+
+
 
                 case .Flimsy_Friend: {
 
@@ -989,12 +620,14 @@ main :: proc() {
 
                 }
 
+
+
             }
 
             update_animation(&entity.death_animation)
 
             if entity.death_animation.value == 1 {
-                raylib.PlaySound(global_asset_sounds[.Pop])
+                raylib.PlaySound(GLOBAL_asset_sounds[.Pop])
                 should_be_removed = true
             }
 
@@ -1004,14 +637,16 @@ main :: proc() {
 
             #partial switch entity.kind {
 
+
+
                 case .Flimsy_Friend: {
 
                     if !entity.walk_animation.running && entity.walk_displacement == {} && entity.walk_delay <= 0 {
 
-                        entity.walk_displacement = 10 * raylib.Vector2Normalize({
-                            main_entities[Main_Entity_Kind.Rolypoly].rendering_position.x + f32(math.cos(time.duration_minutes(entity.age))) * 100 - entity.base_position.x,
-                            main_entities[Main_Entity_Kind.Rolypoly].rendering_position.y + f32(math.sin(time.duration_minutes(entity.age))) * 100 - entity.base_position.y,
-                        })
+                        entity.walk_displacement = 0.5 * World_Vector2(raylib.Vector2Normalize({
+                            entities[Entity_Kind.Rolypoly].base_position.x + f32(math.cos(time.duration_minutes(entity.age))) * 4 - entity.base_position.x,
+                            entities[Entity_Kind.Rolypoly].base_position.y + f32(math.sin(time.duration_minutes(entity.age))) * 4 - entity.base_position.y,
+                        }))
 
                         entity.walk_delay = FLIMSY_FRIEND_EXPECTED_WALK_DELAY_SECONDS * 2 * rand.float32()
 
@@ -1026,9 +661,11 @@ main :: proc() {
 
                         control_animation(&entity.walk_animation, .Clear_Increase_Reset)
 
-                        if mode == .Main {
+                        if scene == .Main {
 
                             #partial switch entity.kind {
+
+
 
                                 case .Flimsy_Friend: {
 
@@ -1037,9 +674,11 @@ main :: proc() {
                                         rand.int31_max(GLOBAL_ASSET_SOUND_PAPER_COUNT)
                                     )
 
-                                    raylib.PlaySound(global_asset_sounds[paper_sound_handle])
+                                    raylib.PlaySound(GLOBAL_asset_sounds[paper_sound_handle])
 
                                 }
+
+
 
                             }
 
@@ -1054,12 +693,13 @@ main :: proc() {
                         entity.base_position.x   += entity.walk_displacement.x
                         entity.base_position.y   += entity.walk_displacement.y
                         entity.walk_displacement  = {}
-
-                        pet_rolypoly(&game_state, main_entities[:], mode)
+                        new_pets_for_rolypoly    += 1
 
                     }
 
                 }
+
+
 
             }
 
@@ -1067,18 +707,7 @@ main :: proc() {
 
             // Handle mouse hovering.
 
-            entity.mouse_hovering = (
-                mode == .Main &&
-                raylib.CheckCollisionPointRec(
-                    raylib.GetMousePosition(),
-                    {
-                        entity.base_position.x - entity.rendering_dimensions.x * entity.origin.x,
-                        entity.base_position.y - entity.rendering_dimensions.y * entity.origin.y,
-                        entity.rendering_dimensions.x,
-                        entity.rendering_dimensions.y,
-                    },
-                )
-            )
+            entity.mouse_hovering = scene == .Main && raylib.CheckCollisionPointRec(raylib.GetMousePosition(), bounding_box)
 
             control_animation(
                 &entity.mouse_hover_animation,
@@ -1101,38 +730,41 @@ main :: proc() {
                 if (
                     old_lock_hover_animation_value    <  0.5 &&
                     entity.lock_hover_animation.value >= 0.5 &&
-                    !raylib.IsSoundPlaying(global_asset_sounds[.Padlock])
+                    !raylib.IsSoundPlaying(GLOBAL_asset_sounds[.Padlock])
                 ) {
-                    raylib.PlaySound(global_asset_sounds[.Padlock])
+                    raylib.PlaySound(GLOBAL_asset_sounds[.Padlock])
+                }
+
+                if entity.mouse_hover_animation.value == 1 {
+
+                    append(&rendering_tasks, Rendering_Task_Dialogue_Bubble {
+                        text = (
+                            game_state.pets < entity.pet_cost
+                                ? fmt.ctprintf("I need {} pets...", entity.pet_cost)
+                                : fmt.ctprintf("Unlock for {} pets...?", entity.pet_cost)
+                        ),
+                        font     = .Sniglet,
+                        position =  Rendering_Vector2_Screen(to_screen_for_rectangle_uv(
+                            entities[Entity_Kind.Rolypoly].rendering_position,
+                            entities[Entity_Kind.Rolypoly].rendering_dimensions,
+                            entities[Entity_Kind.Rolypoly].origin,
+                            { 0.75, 0.75 },
+                        )),
+                    })
+
                 }
 
             }
 
             #partial switch entity.kind {
 
+
+
                 case .Rolypoly: {
-                    raylib.SetMouseCursor((raylib.MouseCursor.POINTING_HAND if entity.mouse_hovering else raylib.MouseCursor.DEFAULT))
+                    raylib.SetMouseCursor(raylib.MouseCursor.POINTING_HAND if entity.mouse_hovering else raylib.MouseCursor.DEFAULT)
                 }
 
-            }
 
-            if entity.locked && entity.pet_cost >= 1 && entity.mouse_hover_animation.value == 1 {
-
-                append(
-                    &dialogue_bubbles,
-                    Dialogue_Bubble {
-                        position = {
-                            main_entities[Main_Entity_Kind.Rolypoly].rendering_position.x + main_entities[Main_Entity_Kind.Rolypoly].rendering_dimensions.x * 0.25,
-                            main_entities[Main_Entity_Kind.Rolypoly].rendering_position.y - main_entities[Main_Entity_Kind.Rolypoly].rendering_dimensions.y * 0.25,
-                        },
-                        message = (
-                            game_state.pets < entity.pet_cost
-                                ? fmt.ctprintf("I need {} pets...", entity.pet_cost)
-                                : fmt.ctprintf("Unlock for {} pets...?", entity.pet_cost)
-                        ),
-                        font_handle = .Sniglet,
-                    }
-                )
 
             }
 
@@ -1140,10 +772,7 @@ main :: proc() {
 
             // Handle mouse clicking.
 
-            entity.mouse_clicked = (
-                mode == .Main &&
-                entity.mouse_hovering && raylib.IsMouseButtonPressed(.LEFT)
-            )
+            entity.mouse_clicked = scene == .Main && entity.mouse_hovering && raylib.IsMouseButtonPressed(.LEFT)
 
             if entity.mouse_clicked {
 
@@ -1151,55 +780,66 @@ main :: proc() {
 
                 entity.click_count += 1
 
-                if !entity.locked {
+                if entity.locked {
+
+                    if entity.lock_hover_animation.value < 1 {
+
+                        // Player needs to hover over the padlock for longer before we do any click action.
+
+                    } else if game_state.pets < entity.pet_cost {
+
+                        control_animation(&entity.lock_hover_animation, .Clear_Increase_Reset)
+                        raylib.PlaySound(GLOBAL_asset_sounds[.Padlock_Locked])
+
+                    } else {
+
+                        game_state.pets -= entity.pet_cost
+                        entity.locked    = false
+                        raylib.PlaySound(GLOBAL_asset_sounds[.Padlock_Unlocked])
+
+                    }
+
+                } else {
 
                     #partial switch entity.kind {
 
+
+
                         case .Rolypoly: {
-                            pet_rolypoly(&game_state, main_entities[:], mode)
+                            new_pets_for_rolypoly += 1
                         }
+
+
 
                         case .Easel: {
-                            mode = .Easel
-                            raylib.PlaySound(global_asset_sounds[.Easel_Open])
+                            scene = .Easel
+                            raylib.PlaySound(GLOBAL_asset_sounds[.Easel_Open])
                         }
 
+
+
                         case .Merowchant: {
-                            mode = .Merowchant
-                            raylib.PlaySound(global_asset_sounds[.Merowchant_Open])
+                            scene = .Merowchant
+                            raylib.PlaySound(GLOBAL_asset_sounds[.Merowchant_Open])
                         }
+
+
 
                         case .Flimsy_Friend: {
 
                             if entity.click_count < FLIMSY_FRIEND_CLICKS_TO_POP {
 
-                                raylib.PlaySound(global_asset_sounds[.Tap])
+                                raylib.PlaySound(GLOBAL_asset_sounds[.Tap])
 
                             } else {
 
-                                raylib.PlaySound(global_asset_sounds[.Pop])
+                                raylib.PlaySound(GLOBAL_asset_sounds[.Pop])
                                 should_be_removed = true
 
                             }
 
                         }
 
-                    }
-
-                } else if entity.lock_hover_animation.value == 1 { // To make sure user hover over lock for long enough...
-
-                    if entity.locked && entity.pet_cost >= 1 && game_state.pets >= entity.pet_cost {
-
-                        game_state.pets -= entity.pet_cost
-                        entity.locked    = false
-
-                        raylib.PlaySound(global_asset_sounds[.Padlock_Unlocked])
-
-                    }
-
-                    if entity.locked {
-                        control_animation(&entity.lock_hover_animation, .Clear_Increase_Reset)
-                        raylib.PlaySound(global_asset_sounds[.Padlock_Locked])
                     }
 
                 }
@@ -1210,50 +850,48 @@ main :: proc() {
 
 
 
-            // Determine rendering dimensions.
-
-            entity.rendering_dimensions = entity.base_dimensions
-
-            if !entity.locked {
-
-                entity.rendering_dimensions.x *= ease_animation(1, 1.025, entity.mouse_hover_animation, .Cubic_Out)
-                entity.rendering_dimensions.y *= ease_animation(1, 1.025, entity.mouse_hover_animation, .Cubic_Out)
-
-                if entity.mouse_click_animation.running {
-                    entity.rendering_dimensions.x /= ease_animation(1.2, 1, entity.mouse_click_animation, .Quartic_Out)
-                    entity.rendering_dimensions.y *= ease_animation(1.2, 1, entity.mouse_click_animation, .Cubic_Out  )
-                }
-
-            }
-
-            if entity.walk_animation.running {
-                entity.rendering_dimensions.x /= 1 + 0.5 * math.sin(ease_animation(0, math.PI, entity.walk_animation, .Quartic_In_Out))
-                entity.rendering_dimensions.y *= 1 + 0.2 * math.sin(ease_animation(0, math.PI, entity.walk_animation, .Quartic_In_Out))
-            }
-
-            if entity.death_animation.running {
-                entity.rendering_dimensions.x *= ease_animation(1, 2, entity.death_animation, .Quartic_In)
-                entity.rendering_dimensions.y *= ease_animation(1, 2, entity.death_animation, .Quartic_In)
-            }
-
-
-
-            // Determine rendering position.
-
-            entity.rendering_position = entity.base_position
-
-            if entity.walk_animation.running {
-                entity.rendering_position.x += ease_animation(0, entity.walk_displacement.x, entity.walk_animation, .Quartic_In_Out)
-                entity.rendering_position.y += ease_animation(0, entity.walk_displacement.y, entity.walk_animation, .Quartic_In_Out)
-                entity.rendering_position.y -= 15 * math.pow(math.sin(entity.walk_animation.value * math.PI), 8)
-            }
-
-
-
             // Mark the entity to be deleted if needed.
 
             if should_be_removed {
-                append(&to_be_removed_main_entities, entity_i)
+                append(&to_be_removed_entities, entity_i)
+            }
+
+
+
+            // Create rendering tasks for the entity if it's still around.
+
+            if !should_be_removed && scene == .Main {
+
+                append(&rendering_tasks, Rendering_Task_Texture {
+                    reference  = entity.texture_reference,
+                    position   = entity.rendering_position,
+                    dimensions = entity.rendering_dimensions,
+                    origin     = entity.origin,
+                    tint       = raylib.GRAY if entity.locked else nil,
+                })
+
+                if entity.locked {
+
+                    append(&rendering_tasks, Rendering_Task_Texture {
+                        reference  = .Padlock,
+                        position   = Rendering_Vector2_Screen(to_screen_for_rectangle_uv(
+                            entity.rendering_position,
+                            entity.rendering_dimensions,
+                            entity.origin,
+                            { 0, 0 },
+                        )),
+                        dimensions = Rendering_Vector2_Cartesian {
+                            ease_animation(0.05, 0.06, entity.lock_hover_animation, .Bounce_Out),
+                            ease_animation(0.05, 0.06, entity.lock_hover_animation, .Bounce_Out),
+                        },
+                        rotation = (
+                            math.sin(ease_animation(0, 6, entity.lock_hover_animation , .Cubic_Out)) * 10 +
+                            math.sin(ease_animation(0, 6, entity.mouse_click_animation, .Cubic_Out)) * 10
+                        ),
+                    })
+
+                }
+
             }
 
         }
@@ -1263,43 +901,53 @@ main :: proc() {
         // We get rid of entities in the reverse order that they were marked to be removed.
         // This is to make it so the indices do not have to be updated because things are moved around.
 
-        #reverse for main_entity_index in to_be_removed_main_entities {
-            unordered_remove(&main_entities, main_entity_index)
-        }
+        #reverse for entity_index in to_be_removed_entities {
 
+            entity := &entities[entity_index]
 
+            #partial switch entity.kind {
 
-        pet_rolypoly :: proc(
-            game_state    : ^Game_State_V1,
-            main_entities : []Main_Entity,
-            mode          : Mode,
-        ) {
+                case .Flimsy_Friend: {
+                    raylib.UnloadTexture(entity.texture_reference.(raylib.Texture))
+                }
 
-            game_state.pets += 1
-
-            control_animation(&main_entities[Main_Entity_Kind.Rolypoly].mouse_click_animation, .Clear_Increase_Reset)
-
-            @(static) time_since_last_click := f32(0)
-
-            xylo_sound_handle := Global_Asset_Sound_Handle(
-                i32(Global_Asset_Sound_Handle.Xylo_0) +
-                rand.int31_max(GLOBAL_ASSET_SOUND_XYLO_COUNT)
-            )
-
-            raylib.SetSoundVolume(
-                global_asset_sounds[xylo_sound_handle],
-                min(max(f32(raylib.GetTime()) - time_since_last_click, 0), 1)
-            )
-
-            if mode == .Main {
-                raylib.PlaySound(global_asset_sounds[xylo_sound_handle])
             }
 
-            time_since_last_click = f32(raylib.GetTime())
+            unordered_remove(&entities, entity_index)
 
         }
 
 
+
+        // Handle new pets done to the Rolypoly.
+
+        if new_pets_for_rolypoly >= 1 {
+
+            game_state.pets += new_pets_for_rolypoly
+
+            control_animation(&entities[Entity_Kind.Rolypoly].mouse_click_animation, .Clear_Increase_Reset)
+
+            if scene == .Main {
+
+                @(static) time_since_last_pet_sound_effect : time.Time
+
+                xylo_sound_handle := Global_Asset_Sound_Handle(
+                    i32(Global_Asset_Sound_Handle.Xylo_0) +
+                    rand.int31_max(GLOBAL_ASSET_SOUND_XYLO_COUNT)
+                )
+
+                raylib.SetSoundVolume(
+                    GLOBAL_asset_sounds[xylo_sound_handle],
+                    f32(clamp(time.duration_seconds(time.diff(time_since_last_pet_sound_effect, time.now())) * 2, 0, 1))
+                )
+
+                raylib.PlaySound(GLOBAL_asset_sounds[xylo_sound_handle])
+
+                time_since_last_pet_sound_effect = time.now()
+
+            }
+
+        }
 
 
 
@@ -1334,7 +982,7 @@ main :: proc() {
 
 
 
-        if mode == .Easel {
+        if scene == .Easel {
 
             if raylib.IsMouseButtonPressed(.LEFT) && hovered_easel_canvas_cell_is_within {
 
@@ -1353,8 +1001,8 @@ main :: proc() {
 
 
 
-        easel_canvas_back_button.hidden = mode != .Easel
-        update_button(&easel_canvas_back_button)
+        easel_canvas_back_button.hidden = scene != .Easel
+        update_button_widget(&easel_canvas_back_button)
 
 
 
@@ -1379,7 +1027,7 @@ main :: proc() {
 
         flimsy_friend_count := 0
 
-        for entity in main_entities {
+        for entity in entities {
             if entity.kind == .Flimsy_Friend {
                 flimsy_friend_count += 1
             }
@@ -1395,23 +1043,23 @@ main :: proc() {
 
 
 
-        easel_canvas_submit_button.hidden = mode != .Easel
+        easel_canvas_submit_button.hidden = scene != .Easel
 
-        update_button(&easel_canvas_submit_button)
+        update_button_widget(&easel_canvas_submit_button)
 
         if easel_canvas_submit_button.pressed {
 
             create_flimsy_friend(
-                main_entities = &main_entities,
-                image         = easel_canvas_image,
-                age           = 0,
-                position      = nil,
+                entities = &entities,
+                image    = easel_canvas_image,
+                age      = 0,
+                position = nil,
             )
 
             raylib.ImageClearBackground(&easel_canvas_image, EASEL_DEFAULT_COLOR)
 
-            mode = .Main
-            raylib.PlaySound(global_asset_sounds[.Easel_Close])
+            scene = .Main
+            raylib.PlaySound(GLOBAL_asset_sounds[.Easel_Close])
 
         }
 
@@ -1431,7 +1079,7 @@ main :: proc() {
 
         merowchant_cat_origin     := raylib.Vector2 { merowchant_cat_dimensions.x * 0.5, merowchant_cat_dimensions.y * 1 }
 
-        hovering_merowchant_cat := mode == .Merowchant && raylib.CheckCollisionPointRec(
+        hovering_merowchant_cat := scene == .Merowchant && raylib.CheckCollisionPointRec(
             raylib.GetMousePosition(),
             {
                 merowchant_cat_position.x - merowchant_cat_origin.x,
@@ -1448,32 +1096,29 @@ main :: proc() {
 
         update_animation(&merowchant_cat_hover_animation)
 
-        if mode == .Merowchant {
+        if scene == .Merowchant {
 
             if hovering_merowchant_cat {
 
-                append(
-                    &dialogue_bubbles,
-                    Dialogue_Bubble {
-                        position = {
-                            merowchant_cat_position.x,
-                            merowchant_cat_position.y - merowchant_cat_dimensions.y * 0.9,
-                        },
-                        message = "i dont have anything right now...",
-                        font_handle = .Sniglet,
-                    }
-                )
+                append(&rendering_tasks, Rendering_Task_Dialogue_Bubble {
+                    text     = "i dont have anything right now...",
+                    font     = .Sniglet,
+                    position = Rendering_Vector2_Screen {
+                        merowchant_cat_position.x,
+                        merowchant_cat_position.y - merowchant_cat_dimensions.y * 0.9,
+                    },
+                })
 
             }
 
             if hovering_merowchant_cat && raylib.IsMouseButtonPressed(.LEFT) {
-                raylib.PlaySound(global_asset_sounds[.Merowchant_Meow])
+                raylib.PlaySound(GLOBAL_asset_sounds[.Merowchant_Meow])
             }
 
         }
 
-        merowchant_back_button.hidden = mode != .Merowchant
-        update_button(&merowchant_back_button)
+        merowchant_back_button.hidden = scene != .Merowchant
+        update_button_widget(&merowchant_back_button)
 
 
 
@@ -1484,17 +1129,40 @@ main :: proc() {
         // TODO.
         //
 
-        if easel_canvas_back_button.pressed || (mode == .Easel && raylib.IsKeyPressed(.ESCAPE)) {
-            mode = .Main
-            raylib.PlaySound(global_asset_sounds[.Easel_Close])
+        if easel_canvas_back_button.pressed || (scene == .Easel && raylib.IsKeyPressed(.ESCAPE)) {
+            scene = .Main
+            raylib.PlaySound(GLOBAL_asset_sounds[.Easel_Close])
         }
 
-        if merowchant_back_button.pressed || (mode == .Merowchant && raylib.IsKeyPressed(.ESCAPE)) {
-            mode = .Main
-            raylib.PlaySound(global_asset_sounds[.Merowchant_Close])
+        if merowchant_back_button.pressed || (scene == .Merowchant && raylib.IsKeyPressed(.ESCAPE)) {
+            scene = .Main
+            raylib.PlaySound(GLOBAL_asset_sounds[.Merowchant_Close])
         }
 
 
+
+
+
+        ////////////////////////////////////////////////////////////////////////////////
+        //
+        // Display version info.
+        //
+
+        append(&rendering_tasks, Rendering_Task_Text {
+            text     = fmt.ctprintf("Pets: {}", game_state.pets),
+            font     = .Sniglet,
+            position = Rendering_Vector2_UV { -0.975, 0.975 },
+            origin   = { -1, 1 },
+            size     = 40,
+        })
+
+        append(&rendering_tasks, Rendering_Task_Text {
+            text     = #config(VERSION, "???"),
+            font     = .Sniglet,
+            position = Rendering_Vector2_UV { 1, 1 },
+            origin   = { 1, 1 },
+            size     = 20,
+        })
 
 
 
@@ -1508,104 +1176,12 @@ main :: proc() {
             raylib.BeginDrawing()
             defer raylib.EndDrawing()
 
-            raylib.ClearBackground(raylib.BROWN if mode == .Easel else raylib.DARKGRAY)
+            raylib.ClearBackground(raylib.BROWN if scene == .Easel else raylib.DARKGRAY)
 
 
 
 
 
-            ////////////////////////////////////////////////////////////////////////////////
-            //
-            // Render statistics.
-            //
-
-            raylib.DrawTextEx(
-                font     = global_asset_fonts[.Sniglet],
-                text     = fmt.ctprintf("Pets: {}", game_state.pets),
-                position = { 10, 10 },
-                fontSize = 40,
-                spacing  = 0,
-                tint     = raylib.WHITE,
-            )
-
-
-
-
-
-            ////////////////////////////////////////////////////////////////////////////////
-            //
-            // Render entities.
-            //
-
-            if mode == .Main {
-
-                for entity in main_entities {
-
-                    texture : raylib.Texture
-
-                    switch reference in entity.texture_reference {
-                        case nil                         : texture = {}
-                        case Global_Asset_Texture_Handle : texture = global_asset_textures[reference]
-                        case raylib.Texture              : texture = reference
-                        case                             : panic("Invalid.")
-                    }
-
-                    raylib.DrawTexturePro(
-                        texture = texture,
-                        source  = {
-                            0,
-                            0,
-                            cast(f32) texture.width,
-                            cast(f32) texture.height,
-                        },
-                        dest = {
-                            entity.rendering_position.x,
-                            entity.rendering_position.y,
-                            entity.rendering_dimensions.x,
-                            entity.rendering_dimensions.y,
-                        },
-                        origin = {
-                            entity.rendering_dimensions.x * entity.origin.x,
-                            entity.rendering_dimensions.y * entity.origin.y,
-                        },
-                        rotation = 0,
-                        tint     = raylib.GRAY if entity.locked else raylib.WHITE,
-                    )
-
-                    if entity.locked {
-
-                        dest := raylib.Rectangle {
-                            entity.rendering_position.x - entity.rendering_dimensions.x * (entity.origin.x - 0.5),
-                            entity.rendering_position.y - entity.rendering_dimensions.y * (entity.origin.y - 0.5),
-                            ease_animation(75, 100, entity.lock_hover_animation, .Bounce_Out),
-                            ease_animation(75, 100, entity.lock_hover_animation, .Bounce_Out),
-                        }
-
-                        raylib.DrawTexturePro(
-                            texture = global_asset_textures[.Padlock],
-                            source  = {
-                                0,
-                                0,
-                                f32(global_asset_textures[.Padlock].width ),
-                                f32(global_asset_textures[.Padlock].height),
-                            },
-                            dest   = dest,
-                            origin = {
-                                dest.width  / 2,
-                                dest.height / 2,
-                            },
-                            rotation = (
-                                math.sin(ease_animation(0, 6, entity.lock_hover_animation, .Cubic_Out)) * 10 +
-                                math.sin(ease_animation(0, 6, entity.mouse_click_animation, .Cubic_Out)) * 10
-                            ),
-                            tint = raylib.WHITE,
-                        )
-
-                    }
-
-                }
-
-            }
 
 
 
@@ -1616,31 +1192,24 @@ main :: proc() {
             // Render easel canvas.
             //
 
-            if mode == .Easel {
+            if scene == .Easel {
 
-                raylib.DrawTexturePro(
-                    texture = easel_canvas_texture,
-                    source  = {
-                        0.0,
-                        0.0,
-                        cast(f32) easel_canvas_texture.width,
-                        cast(f32) easel_canvas_texture.height,
-                    },
-                    dest     = easel_canvas_dest,
-                    origin   = easel_canvas_origin,
-                    rotation = 0.0,
-                    tint     = raylib.WHITE,
-                )
+                append(&rendering_tasks, Rendering_Task_Texture {
+                    reference  = easel_canvas_texture,
+                    position   = Rendering_Vector2_Screen { easel_canvas_dest.x, easel_canvas_dest.y }, // TODO.
+                    dimensions = Rendering_Vector2_Screen { easel_canvas_dest.width, easel_canvas_dest.height }, // TODO.
+                })
 
                 if hovered_easel_canvas_cell_is_within {
 
-                    raylib.DrawRectangleLines(
-                        posX   = i32((easel_canvas_dest.x - easel_canvas_origin.x + f32(hovered_easel_canvas_cell_coordinate_x) * easel_canvas_cell_dimensions.x)),
-                        posY   = i32((easel_canvas_dest.y - easel_canvas_origin.y + f32(hovered_easel_canvas_cell_coordinate_y) * easel_canvas_cell_dimensions.y)),
-                        width  = i32(easel_canvas_cell_dimensions.x),
-                        height = i32(easel_canvas_cell_dimensions.y),
-                        color  = raylib.BLACK,
-                    )
+                    append(&rendering_tasks, Rendering_Task_Rectangle {
+                        position = Rendering_Vector2_Screen { // TODO.
+                            (easel_canvas_dest.x - easel_canvas_origin.x + f32(hovered_easel_canvas_cell_coordinate_x) * easel_canvas_cell_dimensions.x),
+                            (easel_canvas_dest.y - easel_canvas_origin.y + f32(hovered_easel_canvas_cell_coordinate_y) * easel_canvas_cell_dimensions.y),
+                        },
+                        dimensions = Rendering_Vector2_Screen(easel_canvas_cell_dimensions),
+                        origin     = { -1, 1 }, // TODO.
+                    })
 
                 }
 
@@ -1670,23 +1239,23 @@ main :: proc() {
 
                     requirement_text := strings.to_cstring(&builder)
 
-                    raylib.DrawTextEx(
-                        font     = global_asset_fonts[.Sniglet],
-                        text     = requirement_text,
-                        position = { 50, 150 },
-                        fontSize = 30,
-                        spacing  = 0,
-                        tint     = raylib.BLACK,
-                    )
+                    append(&rendering_tasks, Rendering_Task_Text {
+                        text       = requirement_text,
+                        font       = .Sniglet,
+                        position   = Rendering_Vector2_UV { -0.9, 0.5 },
+                        origin     = { -1, 1 },
+                        size       = 30,
+                    })
 
                 }
 
             }
 
-            render_button(easel_canvas_back_button)
-            render_button(easel_canvas_submit_button)
 
 
+            render_button_widget(&rendering_tasks, &easel_canvas_back_button  )
+            render_button_widget(&rendering_tasks, &easel_canvas_submit_button)
+            render_button_widget(&rendering_tasks, &merowchant_back_button    )
 
 
 
@@ -1695,17 +1264,17 @@ main :: proc() {
             // Render Merowchant.
             //
 
-            if mode == .Merowchant {
+            if scene == .Merowchant {
 
                 MEROWCHANT_TABLE_Y :: 400
 
                 raylib.DrawTexturePro(
-                    texture = global_asset_textures[.Merowchant_Background],
+                    texture = GLOBAL_asset_textures[.Merowchant_Background],
                     source  = {
                         0,
                         0,
-                        cast(f32) global_asset_textures[.Merowchant_Background].width,
-                        cast(f32) global_asset_textures[.Merowchant_Background].height,
+                        cast(f32) GLOBAL_asset_textures[.Merowchant_Background].width,
+                        cast(f32) GLOBAL_asset_textures[.Merowchant_Background].height,
                     },
                     dest = {
                         0,
@@ -1719,12 +1288,12 @@ main :: proc() {
                 )
 
                 raylib.DrawTexturePro(
-                    texture = global_asset_textures[.Merowchant_Cat],
+                    texture = GLOBAL_asset_textures[.Merowchant_Cat],
                     source  = {
                         0,
                         0,
-                        cast(f32) global_asset_textures[.Merowchant_Cat].width,
-                        cast(f32) global_asset_textures[.Merowchant_Cat].height,
+                        cast(f32) GLOBAL_asset_textures[.Merowchant_Cat].width,
+                        cast(f32) GLOBAL_asset_textures[.Merowchant_Cat].height,
                     },
                     dest = {
                         merowchant_cat_position.x,
@@ -1738,12 +1307,12 @@ main :: proc() {
                 )
 
                 raylib.DrawTexturePro(
-                    texture = global_asset_textures[.Merowchant_Table],
+                    texture = GLOBAL_asset_textures[.Merowchant_Table],
                     source  = {
                         0,
                         0,
-                        cast(f32) global_asset_textures[.Merowchant_Table].width,
-                        cast(f32) global_asset_textures[.Merowchant_Table].height,
+                        cast(f32) GLOBAL_asset_textures[.Merowchant_Table].width,
+                        cast(f32) GLOBAL_asset_textures[.Merowchant_Table].height,
                     },
                     dest = {
                         0,
@@ -1758,125 +1327,193 @@ main :: proc() {
 
             }
 
-            render_button(merowchant_back_button)
-
-
-
-
-
-            ////////////////////////////////////////////////////////////////////////////////
-            //
-            // Render dialogue bubbles.
-            //
-
-            for dialogue_bubble in dialogue_bubbles {
-
-                DIALOGUE_BUBBLE_FONT_SIZE :: 30
-                DIALOGUE_BUBBLE_PADDING   :: 15
-                DIALOGUE_BUBBLE_ROUNDNESS :: 0.3
-                DIALOGUE_BUBBLE_OUTLINE   :: 4
-
-                measurement := raylib.MeasureTextEx(
-                    font     = global_asset_fonts[dialogue_bubble.font_handle],
-                    text     = dialogue_bubble.message,
-                    fontSize = DIALOGUE_BUBBLE_FONT_SIZE,
-                    spacing  = 0,
-                )
-
-                bubble_rec := raylib.Rectangle {
-                    dialogue_bubble.position.x - DIALOGUE_BUBBLE_PADDING / 2,
-                    dialogue_bubble.position.y - DIALOGUE_BUBBLE_PADDING * 3 - measurement.y,
-                    measurement.x + DIALOGUE_BUBBLE_PADDING * 2,
-                    measurement.y + DIALOGUE_BUBBLE_PADDING * 2,
-                }
-
-                vertices := [?][2]f32 {
-                    { dialogue_bubble.position.x, bubble_rec.y + bubble_rec.height },
-                    { dialogue_bubble.position.x, dialogue_bubble.position.y },
-                    { dialogue_bubble.position.x + (dialogue_bubble.position.x - bubble_rec.x) * 2, bubble_rec.y + bubble_rec.height },
-                }
-
-                raylib.DrawRectangleRoundedLinesEx(
-                    rec       = bubble_rec,
-                    roundness = DIALOGUE_BUBBLE_ROUNDNESS,
-                    segments  = 0,
-                    lineThick = DIALOGUE_BUBBLE_OUTLINE,
-                    color     = raylib.BLACK,
-                )
-
-                raylib.DrawTriangle(
-                    v1       = vertices[0],
-                    v2       = vertices[1],
-                    v3       = vertices[2],
-                    color    = raylib.LIGHTGRAY,
-                )
-
-                raylib.DrawLineEx(
-                    startPos = vertices[0],
-                    endPos   = vertices[1],
-                    thick    = DIALOGUE_BUBBLE_OUTLINE,
-                    color    = raylib.BLACK,
-                )
-
-                raylib.DrawLineEx(
-                    startPos = vertices[1],
-                    endPos   = vertices[2],
-                    thick    = DIALOGUE_BUBBLE_OUTLINE,
-                    color    = raylib.BLACK,
-                )
-
-                raylib.DrawRectangleRounded(
-                    rec       = bubble_rec,
-                    roundness = DIALOGUE_BUBBLE_ROUNDNESS,
-                    segments  = 0,
-                    color     = raylib.LIGHTGRAY,
-                )
-
-                raylib.DrawTextEx(
-                    font     = global_asset_fonts[dialogue_bubble.font_handle],
-                    text     = dialogue_bubble.message,
-                    position = {
-                        bubble_rec.x + DIALOGUE_BUBBLE_PADDING,
-                        bubble_rec.y + DIALOGUE_BUBBLE_PADDING,
-                    },
-                    fontSize = DIALOGUE_BUBBLE_FONT_SIZE,
-                    spacing  = 0,
-                    tint     = raylib.BLACK,
-                )
-
-            }
-
 
 
 
 
             ////////////////////////////////////////////////////////////////////////////////
             //
-            // Display version info.
+            // Handle rendering tasks.
             //
 
-            {
+            for rendering_task in rendering_tasks {
 
-                VERSION_INFO_FONT_HANDLE :: Global_Asset_Font_Handle.Sniglet
-                VERSION_INFO_FONT_SIZE   :: 20
+                switch task in rendering_task {
 
-                text := strings.clone_to_cstring(#config(VERSION, "???"), context.temp_allocator)
 
-                measurement := raylib.MeasureTextEx(
-                    font     = global_asset_fonts[VERSION_INFO_FONT_HANDLE],
-                    text     = text,
-                    fontSize = VERSION_INFO_FONT_SIZE,
-                    spacing  = 0,
-                )
 
-                raylib.DrawTextEx(
-                    font     = global_asset_fonts[VERSION_INFO_FONT_HANDLE],
-                    text     = text,
-                    position = { f32(raylib.GetScreenWidth()) - 10 - measurement.x, 10 },
-                    fontSize = VERSION_INFO_FONT_SIZE,
-                    spacing  = 0,
-                    tint     = raylib.WHITE,
-                )
+                    case Rendering_Task_Texture: {
+
+                        texture : raylib.Texture
+
+                        switch r in task.reference {
+                            case Global_Asset_Texture_Handle : texture = GLOBAL_asset_textures[r]
+                            case raylib.Texture              : texture = r
+                            case                             : panic("Invalid.")
+                        }
+
+                        dest := to_screen_for_rectangle(
+                            task.position,
+                            task.dimensions,
+                            { -1, +1 } // To account for `origin` argument of `raylib.DrawTexturePro`.
+                        )
+
+                        raylib.DrawTexturePro(
+                            texture  = texture,
+                            source   = { 0, 0, f32(texture.width), f32(texture.height) },
+                            dest     = dest,
+                            origin   = {
+                                (1 + task.origin.x) / 2 * dest.width,
+                                (1 - task.origin.y) / 2 * dest.height,
+                            },
+                            rotation = task.rotation,
+                            tint     = task.tint.? or_else raylib.WHITE,
+                        )
+
+                    }
+
+
+
+                    case Rendering_Task_Text: {
+
+                        screen_dimensions := raylib.MeasureTextEx(
+                            font     = GLOBAL_asset_fonts[task.font],
+                            text     = task.text,
+                            fontSize = task.size,
+                            spacing  = 0,
+                        )
+
+                        rectangle := to_screen_for_rectangle(
+                            position   = task.position,
+                            dimensions = Rendering_Vector2_Screen(screen_dimensions),
+                            origin     = task.origin,
+                        )
+
+                        raylib.DrawTextEx(
+                            font     = GLOBAL_asset_fonts[task.font],
+                            text     = task.text,
+                            position = { rectangle.x, rectangle.y },
+                            fontSize = task.size,
+                            spacing  = 0,
+                            tint     = task.color.? or_else raylib.WHITE,
+                        )
+
+                    }
+
+
+
+                    case Rendering_Task_Dialogue_Bubble: { // TODO Rework.
+
+                        DIALOGUE_BUBBLE_FONT_SIZE :: 30
+                        DIALOGUE_BUBBLE_PADDING   :: 15
+                        DIALOGUE_BUBBLE_ROUNDNESS :: 0.3
+                        DIALOGUE_BUBBLE_OUTLINE   :: 4
+
+                        position := to_screen_for_position(task.position)
+
+                        measurement := raylib.MeasureTextEx(
+                            font     = GLOBAL_asset_fonts[task.font],
+                            text     = task.text,
+                            fontSize = DIALOGUE_BUBBLE_FONT_SIZE,
+                            spacing  = 0,
+                        )
+
+                        bubble_rec := raylib.Rectangle {
+                            position.x - DIALOGUE_BUBBLE_PADDING / 2,
+                            position.y - DIALOGUE_BUBBLE_PADDING * 3 - measurement.y,
+                            measurement.x + DIALOGUE_BUBBLE_PADDING * 2,
+                            measurement.y + DIALOGUE_BUBBLE_PADDING * 2,
+                        }
+
+                        vertices := [?][2]f32 {
+                            { position.x, bubble_rec.y + bubble_rec.height },
+                            { position.x, position.y },
+                            { position.x + (position.x - bubble_rec.x) * 2, bubble_rec.y + bubble_rec.height },
+                        }
+
+                        raylib.DrawRectangleRoundedLinesEx(
+                            rec       = bubble_rec,
+                            roundness = DIALOGUE_BUBBLE_ROUNDNESS,
+                            segments  = 0,
+                            lineThick = DIALOGUE_BUBBLE_OUTLINE,
+                            color     = raylib.BLACK,
+                        )
+
+                        raylib.DrawTriangle(
+                            v1       = vertices[0],
+                            v2       = vertices[1],
+                            v3       = vertices[2],
+                            color    = raylib.LIGHTGRAY,
+                        )
+
+                        raylib.DrawLineEx(
+                            startPos = vertices[0],
+                            endPos   = vertices[1],
+                            thick    = DIALOGUE_BUBBLE_OUTLINE,
+                            color    = raylib.BLACK,
+                        )
+
+                        raylib.DrawLineEx(
+                            startPos = vertices[1],
+                            endPos   = vertices[2],
+                            thick    = DIALOGUE_BUBBLE_OUTLINE,
+                            color    = raylib.BLACK,
+                        )
+
+                        raylib.DrawRectangleRounded(
+                            rec       = bubble_rec,
+                            roundness = DIALOGUE_BUBBLE_ROUNDNESS,
+                            segments  = 0,
+                            color     = raylib.LIGHTGRAY,
+                        )
+
+                        raylib.DrawTextEx(
+                            font     = GLOBAL_asset_fonts[task.font],
+                            text     = task.text,
+                            position = {
+                                bubble_rec.x + DIALOGUE_BUBBLE_PADDING,
+                                bubble_rec.y + DIALOGUE_BUBBLE_PADDING,
+                            },
+                            fontSize = DIALOGUE_BUBBLE_FONT_SIZE,
+                            spacing  = 0,
+                            tint     = raylib.BLACK,
+                        )
+
+                    }
+
+
+
+                    case Rendering_Task_Rectangle: {
+
+                        rec := to_screen_for_rectangle(
+                            task.position,
+                            task.dimensions,
+                            task.origin,
+                        )
+
+                        raylib.DrawRectangleRounded(
+                            rec       = rec,
+                            roundness = task.roundness,
+                            segments  = 0,
+                            color     = task.fill.? or_else {},
+                        )
+
+                        raylib.DrawRectangleRoundedLinesEx(
+                            rec       = rec,
+                            roundness = task.roundness,
+                            segments  = 0,
+                            lineThick = task.outline_thickness.? or_else 1,
+                            color     = task.stroke.? or_else raylib.BLACK,
+                        )
+
+                    }
+
+
+
+                    case: panic("Invalid.")
+
+                }
+
             }
 
         }
@@ -1895,122 +1532,112 @@ main :: proc() {
 
 
 
-////////////////////////////////////////////////////////////////////////////////
-//
-// Miscellaneous.
-//
-
-eat_type :: proc(slice : ^[]u8, $T : typeid) -> ^T {
-
-    assert(len(slice^) >= size_of(T))
-
-    result := transmute(^T) raw_data(slice^)
-    slice^  = slice[size_of(T):]
-
-    return result
-
-}
-
-eat_bytes :: proc(slice : ^[]u8, length : int) -> []u8 {
-
-    assert(len(slice) >= length)
-
-    result := slice[:length ]
-    slice^  = slice[ length:]
-
-    return result
-
-}
-
-eat :: proc {
-    eat_type,
-    eat_bytes,
-}
-
 
 
 
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-// Animation.
+// Button Widgets.
 //
 
-Animation :: struct {
-    duration : f32,
-    value    : f32,
-    running  : bool,
-    control  : Animation_Control,
+Button_Widget :: struct {
+
+    style : union {
+        Button_Widget_Style_Lame,
+        Button_Widget_Style_Texture,
+    },
+
+    position         : Rendering_Vector2,
+    mouse_hover_tint : raylib.Color,
+    disabled         : bool,
+    hidden           : bool,
+
+    mouse_hovering   : bool,
+    pressed          : bool,
+
 }
 
-Animation_Control :: enum {
-    Clear_Increase_Reset,
-    Increase_Repeat,
-    Decrease_Stop,
-    Increase_Stop,
+BUTTON_WIDGET_STYLE_LAME_ROUNDNESS :: 0.2
+BUTTON_WIDGET_STYLE_LAME_OUTLINE   :: 4
+BUTTON_WIDGET_STYLE_LAME_PADDING   :: 4
+Button_Widget_Style_Lame           :: struct {
+    text : cstring,
+    font : Global_Asset_Font_Handle,
+    size : f32,
 }
 
-update_animation :: proc(animation : ^Animation) {
+Button_Widget_Style_Texture :: struct {
+    dimensions : Rendering_Vector2,
+    reference  : Rendering_Texture_Reference,
+}
 
-    if animation.running {
+update_button_widget :: proc(button : ^Button_Widget) {
 
-        switch animation.control {
+    button.mouse_hovering = !button.hidden && raylib.CheckCollisionPointRec(
+        raylib.GetMousePosition(),
+        screen_bounding_box_for_button_widget(button^),
+    )
 
-            case .Clear_Increase_Reset: {
+    button.pressed = (
+        !button.disabled &&
+        button.mouse_hovering &&
+        raylib.IsMouseButtonPressed(.LEFT)
+    )
 
-                animation.value += raylib.GetFrameTime() / animation.duration
+}
 
-                if animation.value > 1 {
-                    animation.value   = 0
-                    animation.running = false
-                }
+render_button_widget :: proc(
+    rendering_tasks : ^[dynamic; 32]Rendering_Task,
+    button          : ^Button_Widget,
+) {
 
-            }
-
-            case .Increase_Repeat: {
-                animation.value += raylib.GetFrameTime() / animation.duration
-                animation.value  = math.mod_f32(animation.value, 1)
-            }
-
-            case .Decrease_Stop: {
-                animation.value -= raylib.GetFrameTime() / animation.duration
-                animation.value  = clamp(animation.value, 0, 1)
-            }
-
-            case .Increase_Stop: {
-                animation.value += raylib.GetFrameTime() / animation.duration
-                animation.value  = clamp(animation.value, 0, 1)
-            }
-
-            case: panic("Invalid.")
-
-        }
-
+    if button.hidden {
+        return
     }
 
-}
+    tint : raylib.Color
+    switch {
+        case button.disabled       : tint = raylib.DARKGRAY
+        case button.mouse_hovering : tint = button.mouse_hover_tint
+        case                       : tint = raylib.WHITE
+    }
 
-control_animation :: proc(animation : ^Animation, control : Animation_Control) {
+    bounding_box := screen_bounding_box_for_button_widget(button^)
 
-    animation.control = control
+    switch style in button.style {
 
-    switch control {
+        case Button_Widget_Style_Lame: {
 
-        case .Clear_Increase_Reset: {
-            animation.value   = 0
-            animation.running = true
+            append(rendering_tasks, Rendering_Task_Rectangle {
+                position          = Rendering_Vector2_Screen { bounding_box.x    , bounding_box.y      },
+                dimensions        = Rendering_Vector2_Screen { bounding_box.width, bounding_box.height },
+                origin            = { -1, 1 },
+                fill              = tint,
+                roundness         = BUTTON_WIDGET_STYLE_LAME_ROUNDNESS,
+                outline_thickness = BUTTON_WIDGET_STYLE_LAME_OUTLINE,
+            })
+
+            append(rendering_tasks, Rendering_Task_Text {
+                position = button.position,
+                text     = style.text,
+                font     = style.font,
+                size     = style.size,
+                color    = raylib.BLACK,
+            })
+
         }
 
-        case .Increase_Repeat: {
-            animation.running = true
-        }
+        case Button_Widget_Style_Texture: {
 
-        case .Decrease_Stop: {
-            animation.running = true
-        }
+            append(rendering_tasks, Rendering_Task_Texture {
+                reference  = style.reference,
+                position   = Rendering_Vector2_Screen { bounding_box.x    , bounding_box.y      },
+                dimensions = Rendering_Vector2_Screen { bounding_box.width, bounding_box.height },
+                origin     = { -1, 1 },
+                tint       = tint,
+            })
 
-        case .Increase_Stop: {
-            animation.running = true
         }
 
         case: panic("Invalid.")
@@ -2019,15 +1646,101 @@ control_animation :: proc(animation : ^Animation, control : Animation_Control) {
 
 }
 
-ease_animation :: proc(
-    start     : f32,
-    end       : f32,
-    animation : Animation,
-    easing    : ease.Ease = .Linear,
-) -> f32 {
-    return math.lerp(
-        start,
-        end,
-        ease.ease(easing, animation.value)
-    )
+screen_bounding_box_for_button_widget :: proc(button : Button_Widget) -> raylib.Rectangle {
+
+    position := to_screen_for_position(button.position)
+
+    switch style in button.style {
+
+        case Button_Widget_Style_Lame: {
+
+            measurement := raylib.MeasureTextEx(
+                font     = GLOBAL_asset_fonts[style.font],
+                text     = style.text,
+                fontSize = style.size,
+                spacing  = 0,
+            )
+
+            return {
+                position.x - measurement.x / 2 - BUTTON_WIDGET_STYLE_LAME_PADDING,
+                position.y - measurement.y / 2 - BUTTON_WIDGET_STYLE_LAME_PADDING,
+                measurement.x + BUTTON_WIDGET_STYLE_LAME_PADDING * 2,
+                measurement.y + BUTTON_WIDGET_STYLE_LAME_PADDING * 2,
+            }
+
+        }
+
+        case Button_Widget_Style_Texture: {
+
+            return to_screen_for_rectangle(
+                position   = button.position,
+                dimensions = style.dimensions,
+                origin     = { 0, 0 },
+            )
+
+        }
+
+        case: panic("Invalid.")
+
+    }
+
 }
+
+
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// Entities.
+//
+
+Entity :: struct {
+
+    kind                  : Entity_Kind,
+    base_position         : World_Vector2,
+    origin                : Rendering_Vector2_UV,
+    base_dimensions       : World_Vector2,
+    texture_reference     : Rendering_Texture_Reference,
+    mouse_hover_animation : Animation,
+    lock_hover_animation  : Animation,
+    mouse_click_animation : Animation,
+    death_animation       : Animation,
+    walk_animation        : Animation,
+    walk_displacement     : World_Vector2,
+    walk_delay            : f32,
+    locked                : bool,
+    age                   : time.Duration,
+    pet_cost              : u128,
+
+    mouse_hovering        : bool,
+    mouse_clicked         : bool,
+    click_count           : int,
+
+    rendering_position    : Rendering_Vector2,
+    rendering_dimensions  : Rendering_Vector2,
+
+}
+
+Entity_Kind :: enum {
+
+    nil,
+
+    // These entities are fixed; they are spawned at initialization
+    // and should never be removed. They can be directly indexed for.
+    Rolypoly,
+    Easel,
+    Merowchant,
+
+    // These entities are volatile; they can spawn and despawn at any time.
+    Flimsy_Friend,
+
+}
+
+FLIMSY_FRIEND_CLICKS_TO_POP                   :: 5
+FLIMSY_FRIEND_LIFESPAN                        :: 3 * time.Hour
+FLIMSY_FRIEND_WALK_ANIMATION_DURATION_SECONDS :: 0.5
+FLIMSY_FRIEND_EXPECTED_WALK_DELAY_SECONDS     :: 2.5
+FLIMSY_FRIEND_EXPECTED_PETS_PER_SECOND        :: 1 / (FLIMSY_FRIEND_EXPECTED_WALK_DELAY_SECONDS + FLIMSY_FRIEND_WALK_ANIMATION_DURATION_SECONDS)
+
+World_Vector2 :: distinct raylib.Vector2
