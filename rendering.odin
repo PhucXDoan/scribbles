@@ -193,6 +193,22 @@ to_screen_for_rectangle_uv :: proc(
 
 
 
+to_cartesian_from_screen :: proc(position : Rendering_Vector2_Screen) -> Rendering_Vector2_Cartesian {
+    return {
+        +(position.x * 2 - f32(raylib.GetScreenWidth ())) / f32(raylib.GetScreenWidth()),
+        -(position.y * 2 - f32(raylib.GetScreenHeight())) / f32(raylib.GetScreenWidth()),
+    }
+}
+
+to_uv_from_screen :: proc(position : Rendering_Vector2_Screen) -> Rendering_Vector2_UV {
+    return {
+        +(position.x * 2 - f32(raylib.GetScreenWidth ())) / f32(raylib.GetScreenWidth ()),
+        -(position.y * 2 - f32(raylib.GetScreenHeight())) / f32(raylib.GetScreenHeight()),
+    }
+}
+
+
+
 
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1,44 +1,13 @@
 package main
 
-import "core:fmt"
-import "core:strings"
-import "core:math"
-import "core:math/rand"
-import "core:os"
-import "core:mem"
-import "core:time"
-import "vendor:raylib"
-
-
-
-EASEL_DEFAULT_COLOR :: raylib.Color { 234, 240, 243, 255 }
-
-create_flimsy_friend :: proc(
-    entities : ^[dynamic; 16]Entity,
-    image    : raylib.Image,
-    age      : time.Duration,
-    position : Maybe(World_Vector2),
-) {
-    push(entities, Entity {
-        kind          = .Flimsy_Friend,
-        base_position = position.? or_else {
-            -5 + f32(len(entities)) * 1,
-            -4,
-        },
-        origin                = { 0, -1 },
-        base_dimensions       = { 0.5, 0.5 },
-        texture_reference     = raylib.LoadTextureFromImage(image),
-        mouse_hover_animation = { duration = 0.1                                           },
-        mouse_click_animation = { duration = 0.1                                           },
-        walk_animation        = { duration = FLIMSY_FRIEND_WALK_ANIMATION_DURATION_SECONDS },
-        age                   = age,
-    })
-}
-
-
 main :: proc() {
 
 
+
+    ////////////////////////////////////////////////////////////////////////////////
+    //
+    // Lower level initializations.
+    //
 
     when ODIN_DEBUG {
         create_global_asset_pack_file()
@@ -56,9 +25,16 @@ main :: proc() {
 
     raylib.SetExitKey(nil)
 
-    load_global_asset_pack_file()
+    load_global_assets()
 
 
+
+    ////////////////////////////////////////////////////////////////////////////////
+    //
+    // Game state initializations.
+    //
+    // TODO Clean up.
+    //
 
     Scene :: enum {
         Main,
@@ -70,6 +46,7 @@ main :: proc() {
     easel_canvas_requirement_painted_pixel_minimum := 10
     easel_canvas_requirement_painted_pixel_maximum := 0
     merowchant_cat_hover_animation                 := Animation { duration = 0.1 }
+    debug_show_coordinates                         := false
 
     merowchant_back_button := Button_Widget {
 
@@ -115,7 +92,7 @@ main :: proc() {
 
 
     entities := [dynamic; 16]Entity {
-        Entity_Kind.nil        = {},
+        Entity_Kind.nil        = {}, // TODO Simplify maybe when fixed: https://github.com/odin-lang/Odin/issues/7135
         Entity_Kind.Rolypoly   = {},
         Entity_Kind.Easel      = {},
         Entity_Kind.Merowchant = {},
@@ -159,13 +136,18 @@ main :: proc() {
 
 
 
+    ////////////////////////////////////////////////////////////////////////////////
+    //
+    // Apply game save.
+    //
+    // TODO Clean up.
+    //
+
 
 
     game_state, easel_canvas_image, duration_since_last_game := read_save(&entities)
 
-    when ODIN_DEBUG {
-        fmt.printf("About {} seconds since last game.\n\n", int(time.duration_seconds(duration_since_last_game)))
-    }
+
 
     if easel_canvas_image == {} {
         easel_canvas_image = raylib.GenImageColor(8, 8, EASEL_DEFAULT_COLOR)
@@ -175,9 +157,11 @@ main :: proc() {
 
 
 
-    // Age the entities.
+    when ODIN_DEBUG {
+        fmt.printf("About {} seconds since last game.\n\n", int(time.duration_seconds(duration_since_last_game)))
+    }
 
-    for &entity in entities {
+    for &entity in entities { // Age the entities.
 
         #partial switch entity.kind {
 
@@ -199,21 +183,20 @@ main :: proc() {
     }
 
 
+
+    ////////////////////////////////////////////////////////////////////////////////
+    //
+    // Main loop.
+    //
+
     for {
 
 
 
-
-
         ////////////////////////////////////////////////////////////////////////////////
         //
-        // Game Saving.
+        // Auto-save.
         //
-        ////////////////////////////////////////////////////////////////////////////////
-
-
-
-
 
         @(static)
         should_save_game  := true // Always save the game on start up.
@@ -221,14 +204,9 @@ main :: proc() {
         should_save_game ||= should_close || time.diff(game_state.SAVE_timestamp.? or_else {}, time.now()) >= 60 * time.Second
 
         if should_save_game {
-
             should_save_game = false
-
             write_save(&game_state, entities, easel_canvas_image)
-
         }
-
-
 
 
 
@@ -236,21 +214,14 @@ main :: proc() {
         //
         // Miscellaneous.
         //
-        ////////////////////////////////////////////////////////////////////////////////
-
-
-
-
 
         if should_close {
             break
         }
 
-        mouse_position := raylib.GetMousePosition()
+        mouse_position := Rendering_Vector2_Screen(raylib.GetMousePosition())
 
         rendering_tasks : [dynamic; 32]Rendering_Task
-
-
 
 
 
@@ -258,11 +229,6 @@ main :: proc() {
         //
         // Entity Update.
         //
-        ////////////////////////////////////////////////////////////////////////////////
-
-
-
-
 
         to_be_removed_entities :  [dynamic; cap(entities)]int
         new_pets_for_rolypoly  := u128(0)
@@ -281,15 +247,14 @@ main :: proc() {
 
             {
 
-                rendering_dimensions := Rendering_Vector2_Cartesian {
+                rendering_dimensions := Rendering_Vector2_Cartesian { // TODO Into function.
                     entity.base_dimensions.x * 0.1 / 2,
                     entity.base_dimensions.y * 0.1 / 2,
                 }
 
                 if !entity.locked {
 
-                    rendering_dimensions.x *= ease_animation(1, 1.025, entity.mouse_hover_animation, .Cubic_Out)
-                    rendering_dimensions.y *= ease_animation(1, 1.025, entity.mouse_hover_animation, .Cubic_Out)
+                    rendering_dimensions *= ease_animation(1, 1.025, entity.mouse_hover_animation, .Cubic_Out)
 
                     if entity.mouse_click_animation.running {
                         rendering_dimensions.x /= ease_animation(1.2, 1, entity.mouse_click_animation, .Quartic_Out)
@@ -304,8 +269,7 @@ main :: proc() {
                 }
 
                 if entity.death_animation.running {
-                    rendering_dimensions.x *= ease_animation(1, 2, entity.death_animation, .Quartic_In)
-                    rendering_dimensions.y *= ease_animation(1, 2, entity.death_animation, .Quartic_In)
+                    rendering_dimensions *= ease_animation(1, 2, entity.death_animation, .Quartic_In)
                 }
 
                 entity.rendering_dimensions = rendering_dimensions
@@ -318,15 +282,15 @@ main :: proc() {
 
             {
 
-                rendering_position := Rendering_Vector2_Cartesian {
+                rendering_position := Rendering_Vector2_Cartesian { // TODO Into function.
                     entity.base_position.x * 0.1,
                     entity.base_position.y * 0.1,
                 }
 
                 if entity.walk_animation.running {
 
-                    destination := World_Vector2 {
-                        (entity.base_position.x + entity.walk_displacement.x) * 0.1,
+                    destination := World_Vector2 { // TODO Simplify.
+                        ((entity.base_position.x + entity.walk_displacement.x) * 0.1),
                         ((entity.base_position.y + entity.walk_displacement.y) + 0.5 * math.pow(math.sin(entity.walk_animation.value * math.PI), 8)) * 0.1,
                     }
 
@@ -358,8 +322,6 @@ main :: proc() {
 
             #partial switch entity.kind {
 
-
-
                 case .Flimsy_Friend: {
 
                     if entity.age > FLIMSY_FRIEND_LIFESPAN {
@@ -368,8 +330,6 @@ main :: proc() {
                     }
 
                 }
-
-
 
             }
 
@@ -386,13 +346,11 @@ main :: proc() {
 
             #partial switch entity.kind {
 
-
-
                 case .Flimsy_Friend: {
 
                     if !entity.walk_animation.running && entity.walk_displacement == {} && entity.walk_delay <= 0 {
 
-                        entity.walk_displacement = 0.5 * World_Vector2(raylib.Vector2Normalize({
+                        entity.walk_displacement = 0.5 * World_Vector2(raylib.Vector2Normalize({ // TODO Something better.
                             entities[Entity_Kind.Rolypoly].base_position.x + f32(math.cos(time.duration_minutes(entity.age))) * 4 - entity.base_position.x,
                             entities[Entity_Kind.Rolypoly].base_position.y + f32(math.sin(time.duration_minutes(entity.age))) * 4 - entity.base_position.y,
                         }))
@@ -447,8 +405,6 @@ main :: proc() {
                     }
 
                 }
-
-
 
             }
 
@@ -507,13 +463,13 @@ main :: proc() {
 
             #partial switch entity.kind {
 
-
-
                 case .Rolypoly: {
-                    raylib.SetMouseCursor(raylib.MouseCursor.POINTING_HAND if entity.mouse_hovering else raylib.MouseCursor.DEFAULT)
+                    raylib.SetMouseCursor(( // TODO Factor out.
+                        raylib.MouseCursor.POINTING_HAND
+                        if entity.mouse_hovering
+                        else raylib.MouseCursor.DEFAULT
+                    ))
                 }
-
-
 
             }
 
@@ -552,27 +508,19 @@ main :: proc() {
 
                     #partial switch entity.kind {
 
-
-
                         case .Rolypoly: {
                             new_pets_for_rolypoly += 1
                         }
-
-
 
                         case .Easel: {
                             scene = .Easel
                             raylib.PlaySound(GLOBAL_asset_sounds[.Easel_Open])
                         }
 
-
-
                         case .Merowchant: {
                             scene = .Merowchant
                             raylib.PlaySound(GLOBAL_asset_sounds[.Merowchant_Open])
                         }
-
-
 
                         case .Flimsy_Friend: {
 
@@ -929,13 +877,6 @@ main :: proc() {
 
 
 
-
-
-
-
-
-
-
             ////////////////////////////////////////////////////////////////////////////////
             //
             // Render easel canvas.
@@ -1078,6 +1019,42 @@ main :: proc() {
 
 
 
+            ////////////////////////////////////////////////////////////////////////////////
+            //
+            // Debug GUI.
+            //
+
+            when ODIN_DEBUG {{
+
+                if raylib.IsKeyPressed(.F1) {
+                    debug_show_coordinates = !debug_show_coordinates
+                }
+
+                if debug_show_coordinates {
+
+                    push(&rendering_tasks, Rendering_Task_Text {
+                        font       = .SpaceMono,
+                        position   = mouse_position,
+                        origin     = { 0, -1 },
+                        size       = 24,
+                        color      = raylib.Color { 81, 194, 25, 255 },
+                        text       = fmt.ctprintf(
+                            "mouse_position : {{ {}, {} }}"     + "\n" +
+                            "     cartesian : {{ %.2f, %.2f }}" + "\n" +
+                            "            uv : {{ %.2f, %.2f }}",
+                            mouse_position.x,
+                            mouse_position.y,
+                            to_cartesian_from_screen(mouse_position).x,
+                            to_cartesian_from_screen(mouse_position).y,
+                            to_uv_from_screen(mouse_position).x,
+                            to_uv_from_screen(mouse_position).y,
+                        ),
+                    })
+
+                }
+
+            }}
+
 
 
             ////////////////////////////////////////////////////////////////////////////////
@@ -1087,9 +1064,9 @@ main :: proc() {
 
             render(rendering_tasks[:])
 
+
+
         }
-
-
 
 
 
@@ -1315,3 +1292,46 @@ FLIMSY_FRIEND_EXPECTED_WALK_DELAY_SECONDS     :: 2.5
 FLIMSY_FRIEND_EXPECTED_PETS_PER_SECOND        :: 1 / (FLIMSY_FRIEND_EXPECTED_WALK_DELAY_SECONDS + FLIMSY_FRIEND_WALK_ANIMATION_DURATION_SECONDS)
 
 World_Vector2 :: distinct raylib.Vector2
+
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+EASEL_DEFAULT_COLOR :: raylib.Color { 234, 240, 243, 255 }
+
+create_flimsy_friend :: proc(
+    entities : ^[dynamic; 16]Entity,
+    image    : raylib.Image,
+    age      : time.Duration,
+    position : Maybe(World_Vector2),
+) {
+    push(entities, Entity {
+        kind          = .Flimsy_Friend,
+        base_position = position.? or_else {
+            -5 + f32(len(entities)) * 1,
+            -4,
+        },
+        origin                = { 0, -1 },
+        base_dimensions       = { 0.5, 0.5 },
+        texture_reference     = raylib.LoadTextureFromImage(image),
+        mouse_hover_animation = { duration = 0.1                                           },
+        mouse_click_animation = { duration = 0.1                                           },
+        walk_animation        = { duration = FLIMSY_FRIEND_WALK_ANIMATION_DURATION_SECONDS },
+        age                   = age,
+    })
+}
+
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+
+import "core:fmt"
+import "core:strings"
+import "core:math"
+import "core:math/rand"
+import "core:time"
+import "vendor:raylib"

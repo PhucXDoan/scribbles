@@ -59,6 +59,7 @@ Global_Asset_Sound_Handle      :: enum u32 {
 Global_Asset_Font_Handle :: enum u32 {
     nil,
     Sniglet,
+    SpaceMono,
 }
 
 
@@ -122,7 +123,7 @@ create_global_asset_pack_file :: proc() {
 
 }
 
-load_global_asset_pack_file :: proc() {
+load_global_assets :: proc() {
 
     when ODIN_DEBUG { // Load the local asset pack file at run-time.
 
