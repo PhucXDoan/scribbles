@@ -47,6 +47,7 @@ main :: proc() {
     easel_canvas_requirement_painted_pixel_maximum := 0
     merowchant_cat_hover_animation                 := Animation { duration = 0.1 }
     debug_show_coordinates                         := false
+    debug_corners                                  :  [2]Maybe(Rendering_Vector2_Screen)
 
     merowchant_back_button := Button_Widget {
 
@@ -219,7 +220,26 @@ main :: proc() {
             break
         }
 
-        mouse_position := Rendering_Vector2_Screen(raylib.GetMousePosition())
+        mouse_position            := Rendering_Vector2_Screen(raylib.GetMousePosition())
+        mouse_left_pressed        := raylib.IsMouseButtonPressed(.LEFT)
+        mouse_left_released       := raylib.IsMouseButtonReleased(.LEFT)
+        mouse_left_down           := raylib.IsMouseButtonDown(.LEFT)
+        debug_mouse_left_pressed  := false
+        debug_mouse_left_released := false
+        debug_mouse_left_down     := false
+
+        if debug_show_coordinates {
+
+            debug_mouse_left_pressed = mouse_left_pressed
+            mouse_left_pressed       = false
+
+            debug_mouse_left_released = mouse_left_released
+            mouse_left_pressed        = false
+
+            debug_mouse_left_down    = mouse_left_down
+            mouse_left_down          = false
+
+        }
 
         rendering_tasks : [dynamic; 32]Rendering_Task
 
@@ -477,7 +497,7 @@ main :: proc() {
 
             // Handle mouse clicking.
 
-            entity.mouse_clicked = scene == .Main && entity.mouse_hovering && raylib.IsMouseButtonPressed(.LEFT)
+            entity.mouse_clicked = scene == .Main && entity.mouse_hovering && mouse_left_pressed
 
             if entity.mouse_clicked {
 
@@ -681,7 +701,7 @@ main :: proc() {
 
         if scene == .Easel {
 
-            if raylib.IsMouseButtonPressed(.LEFT) && hovered_easel_canvas_cell_is_within {
+            if mouse_left_pressed && hovered_easel_canvas_cell_is_within {
 
                 raylib.ImageDrawPixel(
                     &easel_canvas_image,
@@ -699,7 +719,7 @@ main :: proc() {
 
 
         easel_canvas_back_button.hidden = scene != .Easel
-        update_button_widget(&easel_canvas_back_button)
+        update_button_widget(&easel_canvas_back_button, mouse_left_pressed)
 
 
 
@@ -742,7 +762,7 @@ main :: proc() {
 
         easel_canvas_submit_button.hidden = scene != .Easel
 
-        update_button_widget(&easel_canvas_submit_button)
+        update_button_widget(&easel_canvas_submit_button, mouse_left_pressed)
 
         if easel_canvas_submit_button.pressed {
 
@@ -808,14 +828,14 @@ main :: proc() {
 
             }
 
-            if hovering_merowchant_cat && raylib.IsMouseButtonPressed(.LEFT) {
+            if hovering_merowchant_cat && mouse_left_pressed {
                 raylib.PlaySound(GLOBAL_asset_sounds[.Merowchant_Meow])
             }
 
         }
 
         merowchant_back_button.hidden = scene != .Merowchant
-        update_button_widget(&merowchant_back_button)
+        update_button_widget(&merowchant_back_button, mouse_left_pressed)
 
 
 
@@ -860,6 +880,109 @@ main :: proc() {
             origin   = { 1, 1 },
             size     = 20,
         })
+
+
+
+        ////////////////////////////////////////////////////////////////////////////////
+        //
+        // Debug GUI.
+        //
+
+        when ODIN_DEBUG {{
+
+            if raylib.IsKeyPressed(.F1) {
+                debug_show_coordinates = !debug_show_coordinates
+            }
+
+            if debug_show_coordinates {
+
+                push(&rendering_tasks, Rendering_Task_Text {
+                    font                                = .SpaceMono,
+                    position                            = mouse_position,
+                    origin                              = { 0, -1 },
+                    size                                = 24,
+                    color                               = raylib.Color { 81, 194, 25, 255 },
+                    adjust_position_to_be_within_screen = true,
+                    text                                = fmt.ctprintf(
+                        "mouse_position : {{ {}, {} }}"     + "\n" +
+                        "     cartesian : {{ %.2f, %.2f }}" + "\n" +
+                        "            uv : {{ %.2f, %.2f }}",
+                        mouse_position.x,
+                        mouse_position.y,
+                        to_cartesian_from_screen(mouse_position).x,
+                        to_cartesian_from_screen(mouse_position).y,
+                        to_uv_from_screen(mouse_position).x,
+                        to_uv_from_screen(mouse_position).y,
+                    ),
+                })
+
+            }
+
+            if debug_mouse_left_pressed {
+
+                debug_corners = {
+                    Rendering_Vector2_Screen(raylib.GetMousePosition()),
+                    nil,
+                }
+
+            }
+
+            if debug_mouse_left_released {
+
+                debug_corners = {
+                    debug_corners[0],
+                    Rendering_Vector2_Screen(raylib.GetMousePosition()),
+                }
+
+                dimensions := debug_corners[1].? - debug_corners[0].?
+
+                if abs(dimensions.x) <= 10 && abs(dimensions.y) <= 10 {
+                    debug_corners = {}
+                }
+
+            }
+
+            if debug_corners[0] != nil {
+
+                start := debug_corners[0].?
+                end   := debug_corners[1].? or_else Rendering_Vector2_Screen(raylib.GetMousePosition())
+
+                top_left := Rendering_Vector2_Screen {
+                    min(start.x, end.x),
+                    min(start.y, end.y),
+                }
+
+                bottom_right := Rendering_Vector2_Screen {
+                    max(start.x, end.x),
+                    max(start.y, end.y),
+                }
+
+                push(&rendering_tasks, Rendering_Task_Rectangle {
+                    position   = top_left,
+                    dimensions = bottom_right - top_left,
+                    origin     = { -1, 1 },
+                    stroke     = raylib.Color { 81, 194, 25, 255 },
+                })
+
+                push(&rendering_tasks, Rendering_Task_Line {
+                    color      = raylib.Color { 81, 194, 25, 255 },
+                    positions  = {
+                        Rendering_Vector2_Screen { top_left.x    , (top_left.y + bottom_right.y) / 2 },
+                        Rendering_Vector2_Screen { bottom_right.x, (top_left.y + bottom_right.y) / 2 },
+                    },
+                })
+
+                push(&rendering_tasks, Rendering_Task_Line {
+                    color      = raylib.Color { 81, 194, 25, 255 },
+                    positions  = {
+                        Rendering_Vector2_Screen { (top_left.x + bottom_right.x) / 2, top_left.y     },
+                        Rendering_Vector2_Screen { (top_left.x + bottom_right.x) / 2, bottom_right.y },
+                    },
+                })
+
+            }
+
+        }}
 
 
 
@@ -1021,45 +1144,6 @@ main :: proc() {
 
             ////////////////////////////////////////////////////////////////////////////////
             //
-            // Debug GUI.
-            //
-
-            when ODIN_DEBUG {{
-
-                if raylib.IsKeyPressed(.F1) {
-                    debug_show_coordinates = !debug_show_coordinates
-                }
-
-                if debug_show_coordinates {
-
-                    push(&rendering_tasks, Rendering_Task_Text {
-                        font                                = .SpaceMono,
-                        position                            = mouse_position,
-                        origin                              = { 0, -1 },
-                        size                                = 24,
-                        color                               = raylib.Color { 81, 194, 25, 255 },
-                        adjust_position_to_be_within_screen = true,
-                        text                                = fmt.ctprintf(
-                            "mouse_position : {{ {}, {} }}"     + "\n" +
-                            "     cartesian : {{ %.2f, %.2f }}" + "\n" +
-                            "            uv : {{ %.2f, %.2f }}",
-                            mouse_position.x,
-                            mouse_position.y,
-                            to_cartesian_from_screen(mouse_position).x,
-                            to_cartesian_from_screen(mouse_position).y,
-                            to_uv_from_screen(mouse_position).x,
-                            to_uv_from_screen(mouse_position).y,
-                        ),
-                    })
-
-                }
-
-            }}
-
-
-
-            ////////////////////////////////////////////////////////////////////////////////
-            //
             // Handle rendering tasks.
             //
 
@@ -1121,7 +1205,7 @@ Button_Widget_Style_Texture :: struct {
     reference  : Rendering_Texture_Reference,
 }
 
-update_button_widget :: proc(button : ^Button_Widget) {
+update_button_widget :: proc(button : ^Button_Widget, mouse_left_pressed : bool) {
 
     button.mouse_hovering = !button.hidden && raylib.CheckCollisionPointRec(
         raylib.GetMousePosition(),
@@ -1131,7 +1215,7 @@ update_button_widget :: proc(button : ^Button_Widget) {
     button.pressed = (
         !button.disabled &&
         button.mouse_hovering &&
-        raylib.IsMouseButtonPressed(.LEFT)
+        mouse_left_pressed
     )
 
 }

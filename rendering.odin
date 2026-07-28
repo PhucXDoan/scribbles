@@ -14,6 +14,7 @@ Rendering_Task :: union {
     Rendering_Task_Text,
     Rendering_Task_Dialogue_Bubble,
     Rendering_Task_Rectangle,
+    Rendering_Task_Line,
 }
 
 Rendering_Task_Texture :: struct {
@@ -48,6 +49,12 @@ Rendering_Task_Rectangle :: struct {
     stroke            : Maybe(raylib.Color),
     fill              : Maybe(raylib.Color),
     roundness         : f32,
+    outline_thickness : Maybe(f32),
+}
+
+Rendering_Task_Line :: struct {
+    positions         : [2]Rendering_Vector2,
+    color             : Maybe(raylib.Color),
     outline_thickness : Maybe(f32),
 }
 
@@ -380,6 +387,9 @@ render :: proc(rendering_tasks : []Rendering_Task) {
                     task.origin,
                 )
 
+                rec.width  = max(rec.width , 0)
+                rec.height = max(rec.height, 0)
+
                 raylib.DrawRectangleRounded(
                     rec       = rec,
                     roundness = task.roundness,
@@ -393,6 +403,19 @@ render :: proc(rendering_tasks : []Rendering_Task) {
                     segments  = 0,
                     lineThick = task.outline_thickness.? or_else 1,
                     color     = task.stroke.? or_else raylib.BLACK,
+                )
+
+            }
+
+
+
+            case Rendering_Task_Line: {
+
+                raylib.DrawLineEx(
+                    startPos = to_screen_for_position(task.positions[0]).xy,
+                    endPos   = to_screen_for_position(task.positions[1]).xy,
+                    thick    = task.outline_thickness.? or_else 1,
+                    color    = task.color.? or_else raylib.BLACK,
                 )
 
             }
