@@ -26,12 +26,13 @@ Rendering_Task_Texture :: struct {
 }
 
 Rendering_Task_Text :: struct {
-    text     : cstring,
-    font     : Global_Asset_Font_Handle,
-    position : Rendering_Vector2,
-    origin   : Rendering_Vector2_UV,
-    size     : f32,
-    color    : Maybe(raylib.Color),
+    text                                : cstring,
+    font                                : Global_Asset_Font_Handle,
+    position                            : Rendering_Vector2,
+    origin                              : Rendering_Vector2_UV,
+    size                                : f32,
+    color                               : Maybe(raylib.Color),
+    adjust_position_to_be_within_screen : bool,
 }
 
 Rendering_Task_Dialogue_Bubble :: struct {
@@ -271,6 +272,11 @@ render :: proc(rendering_tasks : []Rendering_Task) {
                     dimensions = Rendering_Vector2_Screen(screen_dimensions),
                     origin     = task.origin,
                 )
+
+                if task.adjust_position_to_be_within_screen {
+                    rectangle.x = clamp(rectangle.x, 0, f32(raylib.GetScreenWidth ()) - rectangle.width )
+                    rectangle.y = clamp(rectangle.y, 0, f32(raylib.GetScreenHeight()) - rectangle.height)
+                }
 
                 raylib.DrawTextEx(
                     font     = GLOBAL_asset_fonts[task.font],

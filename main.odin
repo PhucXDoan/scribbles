@@ -1033,12 +1033,13 @@ main :: proc() {
                 if debug_show_coordinates {
 
                     push(&rendering_tasks, Rendering_Task_Text {
-                        font       = .SpaceMono,
-                        position   = mouse_position,
-                        origin     = { 0, -1 },
-                        size       = 24,
-                        color      = raylib.Color { 81, 194, 25, 255 },
-                        text       = fmt.ctprintf(
+                        font                                = .SpaceMono,
+                        position                            = mouse_position,
+                        origin                              = { 0, -1 },
+                        size                                = 24,
+                        color                               = raylib.Color { 81, 194, 25, 255 },
+                        adjust_position_to_be_within_screen = true,
+                        text                                = fmt.ctprintf(
                             "mouse_position : {{ {}, {} }}"     + "\n" +
                             "     cartesian : {{ %.2f, %.2f }}" + "\n" +
                             "            uv : {{ %.2f, %.2f }}",
