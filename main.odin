@@ -48,6 +48,7 @@ main :: proc() {
     merowchant_cat_hover_animation                 := Animation { duration = 0.1 }
     debug_show_coordinates                         := false
     debug_corners                                  :  [2]Maybe(Rendering_Vector2_Screen)
+    debug_start_is_at_center                       := false
 
     merowchant_back_button := Button_Widget {
 
@@ -222,9 +223,11 @@ main :: proc() {
 
         mouse_position            := Rendering_Vector2_Screen(raylib.GetMousePosition())
         mouse_left_pressed        := raylib.IsMouseButtonPressed(.LEFT)
+        mouse_right_pressed       := raylib.IsMouseButtonPressed(.RIGHT)
         mouse_left_released       := raylib.IsMouseButtonReleased(.LEFT)
         mouse_left_down           := raylib.IsMouseButtonDown(.LEFT)
         debug_mouse_left_pressed  := false
+        debug_mouse_right_pressed := false
         debug_mouse_left_released := false
         debug_mouse_left_down     := false
 
@@ -232,6 +235,9 @@ main :: proc() {
 
             debug_mouse_left_pressed = mouse_left_pressed
             mouse_left_pressed       = false
+
+            debug_mouse_right_pressed = mouse_right_pressed
+            mouse_left_pressed        = false
 
             debug_mouse_left_released = mouse_left_released
             mouse_left_pressed        = false
@@ -896,6 +902,18 @@ main :: proc() {
 
             if debug_show_coordinates {
 
+                text := fmt.ctprintf(
+                    "mouse_position : {{ {}, {} }}"     + "\n" +
+                    "     cartesian : {{ %.2f, %.2f }}" + "\n" +
+                    "            uv : {{ %.2f, %.2f }}",
+                    mouse_position.x,
+                    mouse_position.y,
+                    to_cartesian_from_screen(mouse_position).x,
+                    to_cartesian_from_screen(mouse_position).y,
+                    to_uv_from_screen(mouse_position).x,
+                    to_uv_from_screen(mouse_position).y,
+                )
+
                 push(&rendering_tasks, Rendering_Task_Text {
                     font                                = .SpaceMono,
                     position                            = mouse_position,
@@ -903,18 +921,12 @@ main :: proc() {
                     size                                = 24,
                     color                               = raylib.Color { 81, 194, 25, 255 },
                     adjust_position_to_be_within_screen = true,
-                    text                                = fmt.ctprintf(
-                        "mouse_position : {{ {}, {} }}"     + "\n" +
-                        "     cartesian : {{ %.2f, %.2f }}" + "\n" +
-                        "            uv : {{ %.2f, %.2f }}",
-                        mouse_position.x,
-                        mouse_position.y,
-                        to_cartesian_from_screen(mouse_position).x,
-                        to_cartesian_from_screen(mouse_position).y,
-                        to_uv_from_screen(mouse_position).x,
-                        to_uv_from_screen(mouse_position).y,
-                    ),
+                    text                                = text,
                 })
+
+                if debug_mouse_right_pressed {
+                    fmt.printf("\n{}\n", text)
+                }
 
             }
 
@@ -955,6 +967,16 @@ main :: proc() {
                 bottom_right := Rendering_Vector2_Screen {
                     max(start.x, end.x),
                     max(start.y, end.y),
+                }
+
+                if raylib.IsKeyPressed(.LEFT_ALT) {
+                    debug_start_is_at_center = !debug_start_is_at_center
+                }
+
+                if debug_start_is_at_center {
+                    dimensions   := bottom_right - top_left
+                    top_left      = start - dimensions
+                    bottom_right  = start + dimensions
                 }
 
                 push(&rendering_tasks, Rendering_Task_Rectangle {
