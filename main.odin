@@ -1,5 +1,30 @@
 package main
 
+Input_Button :: enum {
+    Mouse_Left,
+    Mouse_Right,
+    Escape,
+    Function_1,
+    Alt_Left,
+}
+
+INPUT_BUTTON_MAPPING :: [Input_Button]union { raylib.KeyboardKey, raylib.MouseButton } {
+    .Mouse_Left  = raylib.MouseButton.LEFT,
+    .Mouse_Right = raylib.MouseButton.RIGHT,
+    .Escape      = raylib.KeyboardKey.ESCAPE,
+    .Function_1  = raylib.KeyboardKey.F1,
+    .Alt_Left    = raylib.KeyboardKey.LEFT_ALT,
+}
+
+Input :: struct {
+    mouse    : Rendering_Vector2_Screen,
+    pressed  : bit_set[Input_Button],
+    down     : bit_set[Input_Button],
+    released : bit_set[Input_Button],
+}
+
+
+
 main :: proc() {
 
 
@@ -221,33 +246,59 @@ main :: proc() {
             break
         }
 
-        mouse_position            := Rendering_Vector2_Screen(raylib.GetMousePosition())
-        mouse_left_pressed        := raylib.IsMouseButtonPressed(.LEFT)
-        mouse_right_pressed       := raylib.IsMouseButtonPressed(.RIGHT)
-        mouse_left_released       := raylib.IsMouseButtonReleased(.LEFT)
-        mouse_left_down           := raylib.IsMouseButtonDown(.LEFT)
-        debug_mouse_left_pressed  := false
-        debug_mouse_right_pressed := false
-        debug_mouse_left_released := false
-        debug_mouse_left_down     := false
+        rendering_tasks : [dynamic; 32]Rendering_Task
 
-        if debug_show_coordinates {
 
-            debug_mouse_left_pressed = mouse_left_pressed
-            mouse_left_pressed       = false
 
-            debug_mouse_right_pressed = mouse_right_pressed
-            mouse_left_pressed        = false
+        ////////////////////////////////////////////////////////////////////////////////
+        //
+        // Get user inputs.
+        //
 
-            debug_mouse_left_released = mouse_left_released
-            mouse_left_pressed        = false
+        input := Input {
+            mouse    = Rendering_Vector2_Screen(raylib.GetMousePosition()),
+            pressed  = {}, // To be filled out.
+            down     = {}, // "
+            released = {}, // "
+        }
 
-            debug_mouse_left_down    = mouse_left_down
-            mouse_left_down          = false
+        for enumeration, button in INPUT_BUTTON_MAPPING {
+
+            switch e in enumeration {
+                case raylib.KeyboardKey : if raylib.IsKeyPressed(e)          do input.pressed |= { button }
+                case raylib.MouseButton : if raylib.IsMouseButtonPressed(e)  do input.pressed |= { button }
+                case                    : panic("Invalid.")
+            }
+
+            switch e in enumeration {
+                case raylib.KeyboardKey : if raylib.IsKeyDown(e)             do input.down |= { button }
+                case raylib.MouseButton : if raylib.IsMouseButtonDown(e)     do input.down |= { button }
+                case                    : panic("Invalid.")
+            }
+
+            switch e in enumeration {
+                case raylib.KeyboardKey : if raylib.IsKeyReleased(e)         do input.released |= { button }
+                case raylib.MouseButton : if raylib.IsMouseButtonReleased(e) do input.released |= { button }
+                case                    : panic("Invalid.")
+            }
 
         }
 
-        rendering_tasks : [dynamic; 32]Rendering_Task
+        debug_input := Input {
+            mouse    = input.mouse,
+            pressed  = {},
+            down     = {},
+            released = {},
+        }
+
+        if debug_show_coordinates {
+            debug_input.pressed  = input.pressed
+            debug_input.down     = input.down
+            debug_input.released = input.released
+            input.pressed        = {}
+            input.down           = {}
+            input.released       = {}
+        }
 
 
 
@@ -438,7 +489,7 @@ main :: proc() {
 
             // Handle mouse hovering.
 
-            entity.mouse_hovering = scene == .Main && raylib.CheckCollisionPointRec(raylib.GetMousePosition(), bounding_box)
+            entity.mouse_hovering = scene == .Main && raylib.CheckCollisionPointRec(input.mouse.xy, bounding_box)
 
             control_animation(
                 &entity.mouse_hover_animation,
@@ -503,7 +554,7 @@ main :: proc() {
 
             // Handle mouse clicking.
 
-            entity.mouse_clicked = scene == .Main && entity.mouse_hovering && mouse_left_pressed
+            entity.mouse_clicked = scene == .Main && entity.mouse_hovering && .Mouse_Left in input.pressed
 
             if entity.mouse_clicked {
 
@@ -696,8 +747,8 @@ main :: proc() {
             easel_canvas_dest.height / cast(f32) easel_canvas_image.height,
         }
 
-        hovered_easel_canvas_cell_coordinate_x := cast(int) math.floor((mouse_position.x - (easel_canvas_dest.x - easel_canvas_origin.x)) / easel_canvas_cell_dimensions.x)
-        hovered_easel_canvas_cell_coordinate_y := cast(int) math.floor((mouse_position.y - (easel_canvas_dest.y - easel_canvas_origin.y)) / easel_canvas_cell_dimensions.y)
+        hovered_easel_canvas_cell_coordinate_x := cast(int) math.floor((input.mouse.x - (easel_canvas_dest.x - easel_canvas_origin.x)) / easel_canvas_cell_dimensions.x)
+        hovered_easel_canvas_cell_coordinate_y := cast(int) math.floor((input.mouse.y - (easel_canvas_dest.y - easel_canvas_origin.y)) / easel_canvas_cell_dimensions.y)
         hovered_easel_canvas_cell_is_within    := (
             0 <= hovered_easel_canvas_cell_coordinate_x && hovered_easel_canvas_cell_coordinate_x < cast(int) easel_canvas_image.width &&
             0 <= hovered_easel_canvas_cell_coordinate_y && hovered_easel_canvas_cell_coordinate_y < cast(int) easel_canvas_image.height
@@ -707,7 +758,7 @@ main :: proc() {
 
         if scene == .Easel {
 
-            if mouse_left_pressed && hovered_easel_canvas_cell_is_within {
+            if .Mouse_Left in input.pressed && hovered_easel_canvas_cell_is_within {
 
                 raylib.ImageDrawPixel(
                     &easel_canvas_image,
@@ -725,7 +776,7 @@ main :: proc() {
 
 
         easel_canvas_back_button.hidden = scene != .Easel
-        update_button_widget(&easel_canvas_back_button, mouse_left_pressed)
+        update_button_widget(&easel_canvas_back_button, input)
 
 
 
@@ -768,7 +819,7 @@ main :: proc() {
 
         easel_canvas_submit_button.hidden = scene != .Easel
 
-        update_button_widget(&easel_canvas_submit_button, mouse_left_pressed)
+        update_button_widget(&easel_canvas_submit_button, input)
 
         if easel_canvas_submit_button.pressed {
 
@@ -803,7 +854,7 @@ main :: proc() {
         merowchant_cat_origin     := raylib.Vector2 { merowchant_cat_dimensions.x * 0.5, merowchant_cat_dimensions.y * 1 }
 
         hovering_merowchant_cat := scene == .Merowchant && raylib.CheckCollisionPointRec(
-            raylib.GetMousePosition(),
+            input.mouse.xy,
             {
                 merowchant_cat_position.x - merowchant_cat_origin.x,
                 merowchant_cat_position.y - merowchant_cat_origin.y,
@@ -834,14 +885,14 @@ main :: proc() {
 
             }
 
-            if hovering_merowchant_cat && mouse_left_pressed {
+            if hovering_merowchant_cat && .Mouse_Left in input.pressed {
                 raylib.PlaySound(GLOBAL_asset_sounds[.Merowchant_Meow])
             }
 
         }
 
         merowchant_back_button.hidden = scene != .Merowchant
-        update_button_widget(&merowchant_back_button, mouse_left_pressed)
+        update_button_widget(&merowchant_back_button, input)
 
 
 
@@ -852,12 +903,12 @@ main :: proc() {
         // TODO.
         //
 
-        if easel_canvas_back_button.pressed || (scene == .Easel && raylib.IsKeyPressed(.ESCAPE)) {
+        if easel_canvas_back_button.pressed || (scene == .Easel && .Escape in input.pressed) {
             scene = .Main
             raylib.PlaySound(GLOBAL_asset_sounds[.Easel_Close])
         }
 
-        if merowchant_back_button.pressed || (scene == .Merowchant && raylib.IsKeyPressed(.ESCAPE)) {
+        if merowchant_back_button.pressed || (scene == .Merowchant && .Escape in input.pressed) {
             scene = .Main
             raylib.PlaySound(GLOBAL_asset_sounds[.Merowchant_Close])
         }
@@ -896,27 +947,27 @@ main :: proc() {
 
         when ODIN_DEBUG {{
 
-            if raylib.IsKeyPressed(.F1) {
+            if .Function_1 in (input.pressed | debug_input.pressed) {
                 debug_show_coordinates = !debug_show_coordinates
             }
 
             if debug_show_coordinates {
 
                 text := fmt.ctprintf(
-                    "mouse_position : {{ {}, {} }}"     + "\n" +
-                    "     cartesian : {{ %.2f, %.2f }}" + "\n" +
-                    "            uv : {{ %.2f, %.2f }}",
-                    mouse_position.x,
-                    mouse_position.y,
-                    to_cartesian_from_screen(mouse_position).x,
-                    to_cartesian_from_screen(mouse_position).y,
-                    to_uv_from_screen(mouse_position).x,
-                    to_uv_from_screen(mouse_position).y,
+                    "input.mouse : {{ {}, {} }}"     + "\n" +
+                    "  cartesian : {{ %.2f, %.2f }}" + "\n" +
+                    "         uv : {{ %.2f, %.2f }}",
+                    input.mouse.x,
+                    input.mouse.y,
+                    to_cartesian_from_screen(input.mouse).x,
+                    to_cartesian_from_screen(input.mouse).y,
+                    to_uv_from_screen(input.mouse).x,
+                    to_uv_from_screen(input.mouse).y,
                 )
 
                 push(&rendering_tasks, Rendering_Task_Text {
                     font                                = .SpaceMono,
-                    position                            = mouse_position,
+                    position                            = input.mouse,
                     origin                              = { 0, -1 },
                     size                                = 24,
                     color                               = raylib.Color { 81, 194, 25, 255 },
@@ -924,26 +975,26 @@ main :: proc() {
                     text                                = text,
                 })
 
-                if debug_mouse_right_pressed {
+                if .Mouse_Right in debug_input.pressed {
                     fmt.printf("\n{}\n", text)
                 }
 
             }
 
-            if debug_mouse_left_pressed {
+            if .Mouse_Left in debug_input.pressed {
 
                 debug_corners = {
-                    Rendering_Vector2_Screen(raylib.GetMousePosition()),
+                    input.mouse,
                     nil,
                 }
 
             }
 
-            if debug_mouse_left_released {
+            if .Mouse_Left in debug_input.released {
 
                 debug_corners = {
                     debug_corners[0],
-                    Rendering_Vector2_Screen(raylib.GetMousePosition()),
+                    input.mouse,
                 }
 
                 dimensions := debug_corners[1].? - debug_corners[0].?
@@ -957,7 +1008,7 @@ main :: proc() {
             if debug_corners[0] != nil {
 
                 start := debug_corners[0].?
-                end   := debug_corners[1].? or_else Rendering_Vector2_Screen(raylib.GetMousePosition())
+                end   := debug_corners[1].? or_else input.mouse
 
                 top_left := Rendering_Vector2_Screen {
                     min(start.x, end.x),
@@ -969,7 +1020,7 @@ main :: proc() {
                     max(start.y, end.y),
                 }
 
-                if raylib.IsKeyPressed(.LEFT_ALT) {
+                if .Alt_Left in debug_input.pressed {
                     debug_start_is_at_center = !debug_start_is_at_center
                 }
 
@@ -1227,17 +1278,17 @@ Button_Widget_Style_Texture :: struct {
     reference  : Rendering_Texture_Reference,
 }
 
-update_button_widget :: proc(button : ^Button_Widget, mouse_left_pressed : bool) {
+update_button_widget :: proc(button : ^Button_Widget, input : Input) {
 
     button.mouse_hovering = !button.hidden && raylib.CheckCollisionPointRec(
-        raylib.GetMousePosition(),
+        input.mouse.xy,
         screen_bounding_box_for_button_widget(button^),
     )
 
     button.pressed = (
         !button.disabled &&
         button.mouse_hovering &&
-        mouse_left_pressed
+        .Mouse_Left in input.pressed
     )
 
 }
