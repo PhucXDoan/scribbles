@@ -46,9 +46,21 @@ main :: proc() {
     easel_canvas_requirement_painted_pixel_minimum := 10
     easel_canvas_requirement_painted_pixel_maximum := 0
     merowchant_cat_hover_animation                 := Animation { duration = 0.1 }
-    debug_show_coordinates                         := false
-    debug_corners                                  :  [2]Maybe(Rendering_Vector2_Screen)
-    debug_start_is_at_center                       := false
+
+
+
+    Dev_Tool :: union {
+        Dev_Tool_Coordinate_Display,
+    }
+
+    Dev_Tool_Coordinate_Display :: struct {
+        anchors         : [2]Maybe(Rendering_Vector2_Screen),
+        centered_origin : bool,
+    }
+
+    dev_tool : Dev_Tool
+
+
 
     merowchant_back_button := Button_Widget {
 
@@ -223,7 +235,7 @@ main :: proc() {
 
         rendering_tasks : [dynamic; 32]Rendering_Task
 
-        main_input, debug_input := get_input(debug_focus = debug_show_coordinates)
+        main_input, dev_input := get_input(dev_focus = (dev_tool != nil))
 
 
 
@@ -867,122 +879,144 @@ main :: proc() {
 
 
 
+
+
         ////////////////////////////////////////////////////////////////////////////////
         //
-        // Debug GUI.
+        // Dev Tools.
         //
 
         when ODIN_DEBUG {{
 
-            if .Function_1 in (main_input.pressed | debug_input.pressed) {
-                debug_show_coordinates = !debug_show_coordinates
-            }
+            if .Function_1 in (main_input.pressed | dev_input.pressed) {
 
-            if debug_show_coordinates {
-
-                text := fmt.ctprintf(
-                    "main_input.mouse : {{ {}, {} }}"     + "\n" +
-                    "  cartesian : {{ %.2f, %.2f }}" + "\n" +
-                    "         uv : {{ %.2f, %.2f }}",
-                    main_input.mouse.x,
-                    main_input.mouse.y,
-                    to_cartesian_from_screen(main_input.mouse).x,
-                    to_cartesian_from_screen(main_input.mouse).y,
-                    to_uv_from_screen(main_input.mouse).x,
-                    to_uv_from_screen(main_input.mouse).y,
-                )
-
-                push(&rendering_tasks, Rendering_Task_Text {
-                    font                                = .SpaceMono,
-                    position                            = main_input.mouse,
-                    origin                              = { 0, -1 },
-                    size                                = 24,
-                    color                               = raylib.Color { 81, 194, 25, 255 },
-                    adjust_position_to_be_within_screen = true,
-                    text                                = text,
-                })
-
-                if .Mouse_Right in debug_input.pressed {
-                    fmt.printf("\n{}\n", text)
-                }
+                dev_tool = Dev_Tool_Coordinate_Display {
+                    anchors = {},
+                } if dev_tool == nil else nil
 
             }
 
-            if .Mouse_Left in debug_input.pressed {
+            switch &tool in dev_tool {
 
-                debug_corners = {
-                    main_input.mouse,
-                    nil,
+
+
+                case Dev_Tool_Coordinate_Display: {
+
+
+
+                    // Provide the coordinates.
+
+                    text := fmt.ctprintf(
+                        "    mouse : {{ {}, {} }}"     + "\n" +
+                        "cartesian : {{ %.2f, %.2f }}" + "\n" +
+                        "       uv : {{ %.2f, %.2f }}",
+                        dev_input.mouse.x,
+                        dev_input.mouse.y,
+                        to_cartesian_from_screen(dev_input.mouse).x,
+                        to_cartesian_from_screen(dev_input.mouse).y,
+                        to_uv_from_screen(dev_input.mouse).x,
+                        to_uv_from_screen(dev_input.mouse).y,
+                    )
+
+                    push(&rendering_tasks, Rendering_Task_Text {
+                        font                                = .SpaceMono,
+                        position                            = dev_input.mouse,
+                        origin                              = { 0, -1 },
+                        size                                = 24,
+                        color                               = raylib.Color { 81, 194, 25, 255 },
+                        adjust_position_to_be_within_screen = true,
+                        text                                = text,
+                    })
+
+                    if .Mouse_Right in dev_input.pressed {
+                        fmt.printf("\n{}\n", text)
+                    }
+
+
+
+                    // Beginning to drag.
+
+                    if .Mouse_Left in dev_input.pressed {
+                        tool.anchors = {
+                            dev_input.mouse,
+                            nil,
+                        }
+                    }
+
+
+
+                    // Ending the drag.
+
+                    if .Mouse_Left in dev_input.released {
+
+                        tool.anchors[1] = dev_input.mouse
+
+                        dimensions := tool.anchors[1].? - tool.anchors[0].?
+
+                        if abs(dimensions.x) <= 10 && abs(dimensions.y) <= 10 {
+                            tool.anchors = {} // Too small to be a practical measurement; ignore it.
+                        }
+
+                    }
+
+
+
+                    // Display the rectangular measurement.
+
+                    if tool.anchors[0] != nil {
+
+                        start        := tool.anchors[0].?
+                        end          := tool.anchors[1].? or_else dev_input.mouse
+                        top_left     := Rendering_Vector2_Screen { min(start.x, end.x), min(start.y, end.y) }
+                        bottom_right := Rendering_Vector2_Screen { max(start.x, end.x), max(start.y, end.y) }
+
+                        if .Alt_Left in dev_input.pressed {
+                            tool.centered_origin = !tool.centered_origin
+                        }
+
+                        if tool.centered_origin {
+                            dimensions   := bottom_right - top_left
+                            top_left      = start - dimensions
+                            bottom_right  = start + dimensions
+                        }
+
+                        push(&rendering_tasks, Rendering_Task_Rectangle {
+                            position   = top_left,
+                            dimensions = bottom_right - top_left,
+                            origin     = { -1, 1 },
+                            stroke     = raylib.Color { 81, 194, 25, 255 },
+                        })
+
+                        push(&rendering_tasks, Rendering_Task_Line { // Horizontal line.
+                            color      = raylib.Color { 81, 194, 25, 255 },
+                            positions  = {
+                                Rendering_Vector2_Screen { top_left.x    , (top_left.y + bottom_right.y) / 2 },
+                                Rendering_Vector2_Screen { bottom_right.x, (top_left.y + bottom_right.y) / 2 },
+                            },
+                        })
+
+                        push(&rendering_tasks, Rendering_Task_Line { // Vertical line.
+                            color      = raylib.Color { 81, 194, 25, 255 },
+                            positions  = {
+                                Rendering_Vector2_Screen { (top_left.x + bottom_right.x) / 2, top_left.y     },
+                                Rendering_Vector2_Screen { (top_left.x + bottom_right.x) / 2, bottom_right.y },
+                            },
+                        })
+
+                    }
+
                 }
 
-            }
 
-            if .Mouse_Left in debug_input.released {
 
-                debug_corners = {
-                    debug_corners[0],
-                    main_input.mouse,
-                }
-
-                dimensions := debug_corners[1].? - debug_corners[0].?
-
-                if abs(dimensions.x) <= 10 && abs(dimensions.y) <= 10 {
-                    debug_corners = {}
-                }
-
-            }
-
-            if debug_corners[0] != nil {
-
-                start := debug_corners[0].?
-                end   := debug_corners[1].? or_else main_input.mouse
-
-                top_left := Rendering_Vector2_Screen {
-                    min(start.x, end.x),
-                    min(start.y, end.y),
-                }
-
-                bottom_right := Rendering_Vector2_Screen {
-                    max(start.x, end.x),
-                    max(start.y, end.y),
-                }
-
-                if .Alt_Left in debug_input.pressed {
-                    debug_start_is_at_center = !debug_start_is_at_center
-                }
-
-                if debug_start_is_at_center {
-                    dimensions   := bottom_right - top_left
-                    top_left      = start - dimensions
-                    bottom_right  = start + dimensions
-                }
-
-                push(&rendering_tasks, Rendering_Task_Rectangle {
-                    position   = top_left,
-                    dimensions = bottom_right - top_left,
-                    origin     = { -1, 1 },
-                    stroke     = raylib.Color { 81, 194, 25, 255 },
-                })
-
-                push(&rendering_tasks, Rendering_Task_Line {
-                    color      = raylib.Color { 81, 194, 25, 255 },
-                    positions  = {
-                        Rendering_Vector2_Screen { top_left.x    , (top_left.y + bottom_right.y) / 2 },
-                        Rendering_Vector2_Screen { bottom_right.x, (top_left.y + bottom_right.y) / 2 },
-                    },
-                })
-
-                push(&rendering_tasks, Rendering_Task_Line {
-                    color      = raylib.Color { 81, 194, 25, 255 },
-                    positions  = {
-                        Rendering_Vector2_Screen { (top_left.x + bottom_right.x) / 2, top_left.y     },
-                        Rendering_Vector2_Screen { (top_left.x + bottom_right.x) / 2, bottom_right.y },
-                    },
-                })
+                case nil : // None.
+                case     : panic("Invalid.")
 
             }
 
         }}
+
+
 
 
 
@@ -1433,9 +1467,9 @@ Input_Button :: enum {
     Alt_Left,
 }
 
-get_input :: proc(debug_focus : bool) -> (
-    main_input  : Input,
-    debug_input : Input,
+get_input :: proc(dev_focus : bool) -> (
+    main_input : Input,
+    dev_input  : Input,
 ) {
 
     main_input = Input {
@@ -1473,20 +1507,20 @@ get_input :: proc(debug_focus : bool) -> (
 
     }
 
-    debug_input = Input {
+    dev_input = Input {
         mouse    = main_input.mouse,
         pressed  = {},
         down     = {},
         released = {},
     }
 
-    if debug_focus {
-        debug_input.pressed  = main_input.pressed
-        debug_input.down     = main_input.down
-        debug_input.released = main_input.released
-        main_input.pressed   = {}
-        main_input.down      = {}
-        main_input.released  = {}
+    if dev_focus {
+        dev_input.pressed   = main_input.pressed
+        dev_input.down      = main_input.down
+        dev_input.released  = main_input.released
+        main_input.pressed  = {}
+        main_input.down     = {}
+        main_input.released = {}
     }
 
     return
