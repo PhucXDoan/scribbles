@@ -28,7 +28,7 @@ Rendering_Task_Texture :: struct {
 
 Rendering_Task_Text :: struct {
     text                                : cstring,
-    font                                : Global_Asset_Font_Handle,
+    font                                : Baked_Font,
     position                            : Rendering_Vector2,
     origin                              : Rendering_Vector2_UV,
     size                                : f32,
@@ -38,7 +38,7 @@ Rendering_Task_Text :: struct {
 
 Rendering_Task_Dialogue_Bubble :: struct {
     text     : cstring,
-    font     : Global_Asset_Font_Handle,
+    font     : Baked_Font,
     position : Rendering_Vector2,
 }
 
@@ -61,7 +61,7 @@ Rendering_Task_Line :: struct {
 
 
 Rendering_Texture_Reference :: union {
-    Global_Asset_Texture_Handle,
+    Baked_Texture,
     raylib.Texture,
 }
 
@@ -238,7 +238,7 @@ render :: proc(rendering_tasks : []Rendering_Task) {
                 texture : raylib.Texture
 
                 switch reference in task.reference {
-                    case Global_Asset_Texture_Handle : texture = GLOBAL_asset_textures[reference]
+                    case Baked_Texture : texture = BAKED_textures[reference]
                     case raylib.Texture              : texture = reference
                     case                             : panic("Invalid.")
                 }
@@ -268,7 +268,7 @@ render :: proc(rendering_tasks : []Rendering_Task) {
             case Rendering_Task_Text: {
 
                 screen_dimensions := raylib.MeasureTextEx(
-                    font     = GLOBAL_asset_fonts[task.font],
+                    font     = BAKED_fonts[task.font],
                     text     = task.text,
                     fontSize = task.size,
                     spacing  = 0,
@@ -286,7 +286,7 @@ render :: proc(rendering_tasks : []Rendering_Task) {
                 }
 
                 raylib.DrawTextEx(
-                    font     = GLOBAL_asset_fonts[task.font],
+                    font     = BAKED_fonts[task.font],
                     text     = task.text,
                     position = { rectangle.x, rectangle.y },
                     fontSize = task.size,
@@ -308,7 +308,7 @@ render :: proc(rendering_tasks : []Rendering_Task) {
                 tip := to_screen_for_position(task.position)
 
                 measurement := raylib.MeasureTextEx(
-                    font     = GLOBAL_asset_fonts[task.font],
+                    font     = BAKED_fonts[task.font],
                     text     = task.text,
                     fontSize = FONT_SIZE,
                     spacing  = 0,
@@ -364,7 +364,7 @@ render :: proc(rendering_tasks : []Rendering_Task) {
                 )
 
                 raylib.DrawTextEx(                  // Finally the dialogue bubble text itself.
-                    font     = GLOBAL_asset_fonts[task.font],
+                    font     = BAKED_fonts[task.font],
                     text     = task.text,
                     position = {
                         rec.x + PADDING,

@@ -9,10 +9,6 @@ main :: proc() {
     // Lower level initializations.
     //
 
-    when ODIN_DEBUG {
-        create_global_asset_pack_file()
-    }
-
     raylib.SetTraceLogLevel(.WARNING)
     raylib.SetTargetFPS(60)
     raylib.SetConfigFlags({ .MSAA_4X_HINT })
@@ -25,7 +21,46 @@ main :: proc() {
 
     raylib.SetExitKey(nil)
 
-    load_global_assets()
+    entities := [dynamic; 16]Entity {
+        Static_Entity_Kind.nil        = {}, // TODO Simplify maybe when fixed: https://github.com/odin-lang/Odin/issues/7135
+        Static_Entity_Kind.Rolypoly   = {}, // TODO "
+        Static_Entity_Kind.Easel      = {}, // TODO "
+        Static_Entity_Kind.Merowchant = {}, // TODO "
+    }
+
+    entities[Static_Entity_Kind.Rolypoly] = {
+        kind                  = .Rolypoly,
+        texture_reference     = .Rolypoly,
+        mouse_hover_animation = { duration = 0.1  },
+        mouse_click_animation = { duration = 0.25 },
+    }
+
+    entities[Static_Entity_Kind.Easel] = {
+        kind                  = .Easel,
+        texture_reference     = .Easel,
+        mouse_hover_animation = { duration = 0.1 },
+        lock_hover_animation  = { duration = 0.1 },
+        mouse_click_animation = { duration = 0.1 },
+        locked                = {}, // Filled out later.
+        pet_cost              = 100,
+    }
+
+    entities[Static_Entity_Kind.Merowchant] = Entity {
+        kind                  = .Merowchant,
+        texture_reference     = .Merowchant_Outside,
+        mouse_hover_animation = { duration = 0.1 },
+        lock_hover_animation  = { duration = 0.1 },
+        mouse_click_animation = { duration = 0.1 },
+        locked                = {}, // Filled out later.
+        pet_cost              = 9_999,
+    }
+
+    bake(
+        save_static_entity_data = false,
+        entities                = entities[:],
+    )
+
+
 
 
 
@@ -101,51 +136,6 @@ main :: proc() {
 
         mouse_hover_tint = raylib.GREEN,
 
-    }
-
-
-
-    entities := [dynamic; 16]Entity {
-        Entity_Kind_Static.nil        = {}, // TODO Simplify maybe when fixed: https://github.com/odin-lang/Odin/issues/7135
-        Entity_Kind_Static.Rolypoly   = {},
-        Entity_Kind_Static.Easel      = {},
-        Entity_Kind_Static.Merowchant = {},
-    }
-
-    entities[Entity_Kind_Static.Rolypoly] = {
-        kind                  = .Rolypoly,
-        base_position         = { 0, 0 },
-        origin                = { 0, 0 },
-        base_dimensions       = { 1.5, 1 },
-        texture_reference     = .Rolypoly,
-        mouse_hover_animation = { duration = 0.1  },
-        mouse_click_animation = { duration = 0.25 },
-    }
-
-    entities[Entity_Kind_Static.Easel] = {
-        kind                  = .Easel,
-        base_position         = { 7.5, -1 },
-        origin                = { 0, -1 },
-        base_dimensions       = { 1.5, 3 },
-        texture_reference     = .Easel,
-        mouse_hover_animation = { duration = 0.1 },
-        lock_hover_animation  = { duration = 0.1 },
-        mouse_click_animation = { duration = 0.1 },
-        locked                = {}, // Filled out later.
-        pet_cost              = 100,
-    }
-
-    entities[Entity_Kind_Static.Merowchant] = Entity {
-        kind                  = .Merowchant,
-        base_position         = { -6, 1 },
-        origin                = { 0, -1 },
-        base_dimensions       = { 3, 3 },
-        texture_reference     = .Merowchant_Outside,
-        mouse_hover_animation = { duration = 0.1 },
-        lock_hover_animation  = { duration = 0.1 },
-        mouse_click_animation = { duration = 0.1 },
-        locked                = {}, // Filled out later.
-        pet_cost              = 9_999,
     }
 
 
@@ -352,7 +342,7 @@ main :: proc() {
             update_animation(&entity.death_animation)
 
             if entity.death_animation.value == 1 {
-                raylib.PlaySound(GLOBAL_asset_sounds[.Pop])
+                raylib.PlaySound(BAKED_sounds[.Pop])
                 should_be_removed = true
             }
 
@@ -367,8 +357,8 @@ main :: proc() {
                     if !entity.walk_animation.running && entity.walk_displacement == {} && entity.walk_delay <= 0 {
 
                         entity.walk_displacement = 0.5 * World_Vector2(raylib.Vector2Normalize({ // TODO Something better.
-                            entities[Entity_Kind_Static.Rolypoly].base_position.x + f32(math.cos(time.duration_minutes(entity.age))) * 4 - entity.base_position.x,
-                            entities[Entity_Kind_Static.Rolypoly].base_position.y + f32(math.sin(time.duration_minutes(entity.age))) * 4 - entity.base_position.y,
+                            entities[Static_Entity_Kind.Rolypoly].base_position.x + f32(math.cos(time.duration_minutes(entity.age))) * 4 - entity.base_position.x,
+                            entities[Static_Entity_Kind.Rolypoly].base_position.y + f32(math.sin(time.duration_minutes(entity.age))) * 4 - entity.base_position.y,
                         }))
 
                         entity.walk_delay = FLIMSY_FRIEND_EXPECTED_WALK_DELAY_SECONDS * 2 * rand.float32()
@@ -392,12 +382,12 @@ main :: proc() {
 
                                 case .Flimsy_Friend: {
 
-                                    paper_sound_handle := Global_Asset_Sound_Handle(
-                                        i32(Global_Asset_Sound_Handle.Paper_0) +
-                                        rand.int31_max(GLOBAL_ASSET_SOUND_PAPER_COUNT)
+                                    paper_sound_handle := Baked_Sound(
+                                        i32(Baked_Sound.Paper_0) +
+                                        rand.int31_max(BAKED_SOUND_PAPER_COUNT)
                                     )
 
-                                    raylib.PlaySound(GLOBAL_asset_sounds[paper_sound_handle])
+                                    raylib.PlaySound(BAKED_sounds[paper_sound_handle])
 
                                 }
 
@@ -451,9 +441,9 @@ main :: proc() {
                 if (
                     old_lock_hover_animation_value    <  0.5 &&
                     entity.lock_hover_animation.value >= 0.5 &&
-                    !raylib.IsSoundPlaying(GLOBAL_asset_sounds[.Padlock])
+                    !raylib.IsSoundPlaying(BAKED_sounds[.Padlock])
                 ) {
-                    raylib.PlaySound(GLOBAL_asset_sounds[.Padlock])
+                    raylib.PlaySound(BAKED_sounds[.Padlock])
                 }
 
                 if entity.mouse_hover_animation.value == 1 {
@@ -466,9 +456,9 @@ main :: proc() {
                         ),
                         font     = .Sniglet,
                         position =  Rendering_Vector2_Screen(to_screen_for_rectangle_uv(
-                            entities[Entity_Kind_Static.Rolypoly].rendering_position,
-                            entities[Entity_Kind_Static.Rolypoly].rendering_dimensions,
-                            entities[Entity_Kind_Static.Rolypoly].origin,
+                            entities[Static_Entity_Kind.Rolypoly].rendering_position,
+                            entities[Static_Entity_Kind.Rolypoly].rendering_dimensions,
+                            entities[Static_Entity_Kind.Rolypoly].origin,
                             { 0.75, 0.75 },
                         )),
                     })
@@ -510,13 +500,13 @@ main :: proc() {
                     } else if game_state.pets < entity.pet_cost {
 
                         control_animation(&entity.lock_hover_animation, .Clear_Increase_Reset)
-                        raylib.PlaySound(GLOBAL_asset_sounds[.Padlock_Locked])
+                        raylib.PlaySound(BAKED_sounds[.Padlock_Locked])
 
                     } else {
 
                         game_state.pets -= entity.pet_cost
                         entity.locked    = false
-                        raylib.PlaySound(GLOBAL_asset_sounds[.Padlock_Unlocked])
+                        raylib.PlaySound(BAKED_sounds[.Padlock_Unlocked])
 
                     }
 
@@ -530,23 +520,23 @@ main :: proc() {
 
                         case .Easel: {
                             scene = .Easel
-                            raylib.PlaySound(GLOBAL_asset_sounds[.Easel_Open])
+                            raylib.PlaySound(BAKED_sounds[.Easel_Open])
                         }
 
                         case .Merowchant: {
                             scene = .Merowchant
-                            raylib.PlaySound(GLOBAL_asset_sounds[.Merowchant_Open])
+                            raylib.PlaySound(BAKED_sounds[.Merowchant_Open])
                         }
 
                         case .Flimsy_Friend: {
 
                             if entity.click_count < FLIMSY_FRIEND_CLICKS_TO_POP {
 
-                                raylib.PlaySound(GLOBAL_asset_sounds[.Tap])
+                                raylib.PlaySound(BAKED_sounds[.Tap])
 
                             } else {
 
-                                raylib.PlaySound(GLOBAL_asset_sounds[.Pop])
+                                raylib.PlaySound(BAKED_sounds[.Pop])
                                 should_be_removed = true
 
                             }
@@ -638,23 +628,23 @@ main :: proc() {
 
             game_state.pets += new_pets_for_rolypoly
 
-            control_animation(&entities[Entity_Kind_Static.Rolypoly].mouse_click_animation, .Clear_Increase_Reset)
+            control_animation(&entities[Static_Entity_Kind.Rolypoly].mouse_click_animation, .Clear_Increase_Reset)
 
             if scene == .Main {
 
                 @(static) time_since_last_pet_sound_effect : time.Time
 
-                xylo_sound_handle := Global_Asset_Sound_Handle(
-                    i32(Global_Asset_Sound_Handle.Xylo_0) +
-                    rand.int31_max(GLOBAL_ASSET_SOUND_XYLO_COUNT)
+                xylo_sound_handle := Baked_Sound(
+                    i32(Baked_Sound.Xylo_0) +
+                    rand.int31_max(BAKED_SOUND_XYLO_COUNT)
                 )
 
                 raylib.SetSoundVolume(
-                    GLOBAL_asset_sounds[xylo_sound_handle],
+                    BAKED_sounds[xylo_sound_handle],
                     f32(clamp(time.duration_seconds(time.diff(time_since_last_pet_sound_effect, time.now())) * 2, 0, 1))
                 )
 
-                raylib.PlaySound(GLOBAL_asset_sounds[xylo_sound_handle])
+                raylib.PlaySound(BAKED_sounds[xylo_sound_handle])
 
                 time_since_last_pet_sound_effect = time.now()
 
@@ -772,7 +762,7 @@ main :: proc() {
             raylib.ImageClearBackground(&easel_canvas_image, EASEL_DEFAULT_COLOR)
 
             scene = .Main
-            raylib.PlaySound(GLOBAL_asset_sounds[.Easel_Close])
+            raylib.PlaySound(BAKED_sounds[.Easel_Close])
 
         }
 
@@ -825,7 +815,7 @@ main :: proc() {
             }
 
             if hovering_merowchant_cat && .Mouse_Left in main_input.pressed {
-                raylib.PlaySound(GLOBAL_asset_sounds[.Merowchant_Meow])
+                raylib.PlaySound(BAKED_sounds[.Merowchant_Meow])
             }
 
         }
@@ -844,12 +834,23 @@ main :: proc() {
 
         if easel_canvas_back_button.pressed || (scene == .Easel && .Escape in main_input.pressed) {
             scene = .Main
-            raylib.PlaySound(GLOBAL_asset_sounds[.Easel_Close])
+            raylib.PlaySound(BAKED_sounds[.Easel_Close])
         }
 
         if merowchant_back_button.pressed || (scene == .Merowchant && .Escape in main_input.pressed) {
             scene = .Main
-            raylib.PlaySound(GLOBAL_asset_sounds[.Merowchant_Close])
+            raylib.PlaySound(BAKED_sounds[.Merowchant_Close])
+        }
+
+        if .Space in main_input.pressed {
+
+            entities[Static_Entity_Kind.Rolypoly].base_position.x += 0.05
+
+            bake(
+                save_static_entity_data = true,
+                entities                = entities[:],
+            )
+
         }
 
 
@@ -1116,12 +1117,12 @@ main :: proc() {
                 MEROWCHANT_TABLE_Y :: 400
 
                 raylib.DrawTexturePro(
-                    texture = GLOBAL_asset_textures[.Merowchant_Background],
+                    texture = BAKED_textures[.Merowchant_Background],
                     source  = {
                         0,
                         0,
-                        cast(f32) GLOBAL_asset_textures[.Merowchant_Background].width,
-                        cast(f32) GLOBAL_asset_textures[.Merowchant_Background].height,
+                        cast(f32) BAKED_textures[.Merowchant_Background].width,
+                        cast(f32) BAKED_textures[.Merowchant_Background].height,
                     },
                     dest = {
                         0,
@@ -1135,12 +1136,12 @@ main :: proc() {
                 )
 
                 raylib.DrawTexturePro(
-                    texture = GLOBAL_asset_textures[.Merowchant_Cat],
+                    texture = BAKED_textures[.Merowchant_Cat],
                     source  = {
                         0,
                         0,
-                        cast(f32) GLOBAL_asset_textures[.Merowchant_Cat].width,
-                        cast(f32) GLOBAL_asset_textures[.Merowchant_Cat].height,
+                        cast(f32) BAKED_textures[.Merowchant_Cat].width,
+                        cast(f32) BAKED_textures[.Merowchant_Cat].height,
                     },
                     dest = {
                         merowchant_cat_position.x,
@@ -1154,12 +1155,12 @@ main :: proc() {
                 )
 
                 raylib.DrawTexturePro(
-                    texture = GLOBAL_asset_textures[.Merowchant_Table],
+                    texture = BAKED_textures[.Merowchant_Table],
                     source  = {
                         0,
                         0,
-                        cast(f32) GLOBAL_asset_textures[.Merowchant_Table].width,
-                        cast(f32) GLOBAL_asset_textures[.Merowchant_Table].height,
+                        cast(f32) BAKED_textures[.Merowchant_Table].width,
+                        cast(f32) BAKED_textures[.Merowchant_Table].height,
                     },
                     dest = {
                         0,
@@ -1230,7 +1231,7 @@ BUTTON_WIDGET_STYLE_LAME_OUTLINE   :: 4
 BUTTON_WIDGET_STYLE_LAME_PADDING   :: 4
 Button_Widget_Style_Lame           :: struct {
     text : cstring,
-    font : Global_Asset_Font_Handle,
+    font : Baked_Font,
     size : f32,
 }
 
@@ -1322,7 +1323,7 @@ screen_bounding_box_for_button_widget :: proc(button : Button_Widget) -> raylib.
         case Button_Widget_Style_Lame: {
 
             measurement := raylib.MeasureTextEx(
-                font     = GLOBAL_asset_fonts[style.font],
+                font     = BAKED_fonts[style.font],
                 text     = style.text,
                 fontSize = style.size,
                 spacing  = 0,
@@ -1362,12 +1363,16 @@ screen_bounding_box_for_button_widget :: proc(button : Button_Widget) -> raylib.
 // Entities.
 //
 
+Bakeable_Entity_Fields :: struct {
+    base_position   : World_Vector2,
+    origin          : Rendering_Vector2_UV,
+    base_dimensions : World_Vector2,
+}
+
 Entity :: struct {
 
     kind                  : Entity_Kind,
-    base_position         : World_Vector2,
-    origin                : Rendering_Vector2_UV,
-    base_dimensions       : World_Vector2,
+    using bakeable_fields : Bakeable_Entity_Fields,
     texture_reference     : Rendering_Texture_Reference,
     mouse_hover_animation : Animation,
     lock_hover_animation  : Animation,
@@ -1390,18 +1395,18 @@ Entity :: struct {
 }
 
 Entity_Kind :: union {
-    Entity_Kind_Static,
-    Entity_Kind_Dynamic,
+    Static_Entity_Kind,
+    Dynamic_Entity_Kind,
 }
 
-Entity_Kind_Static :: enum {
+Static_Entity_Kind :: enum {
     nil,
     Rolypoly,
     Easel,
     Merowchant,
 }
 
-Entity_Kind_Dynamic :: enum {
+Dynamic_Entity_Kind :: enum {
     nil,
     Flimsy_Friend,
 }
@@ -1467,6 +1472,7 @@ Input_Button :: enum {
     Escape,
     Function_1,
     Alt_Left,
+    Space,
 }
 
 get_input :: proc(dev_focus : bool) -> (
@@ -1487,6 +1493,7 @@ get_input :: proc(dev_focus : bool) -> (
         .Escape      = raylib.KeyboardKey.ESCAPE,
         .Function_1  = raylib.KeyboardKey.F1,
         .Alt_Left    = raylib.KeyboardKey.LEFT_ALT,
+        .Space       = raylib.KeyboardKey.SPACE,
     }) {
 
         switch e in enumeration {

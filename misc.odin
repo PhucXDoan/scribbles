@@ -26,9 +26,7 @@ push_dynamic_array_element :: proc(array : ^[dynamic]$T, element : T) {
 
 
 memeq :: proc(lhs : $T, rhs : T) -> bool {
-    lhs_copy := lhs
-    rhs_copy := rhs
-    return mem.compare_ptrs(&lhs_copy, &rhs_copy, size_of(T)) == 0
+    return slice.equal(mem.any_to_bytes(lhs), mem.any_to_bytes(rhs), size_of(T)) == 0
 }
 
 
@@ -60,6 +58,16 @@ eat_bytes :: proc(slice : ^[]u8, length : $T) -> []u8 where intrinsics.type_is_i
 
 }
 
+linear_search :: proc {
+    slice.linear_search,
+    linear_search_enumerated_array,
+}
+
+linear_search_enumerated_array :: proc "contextless" (array : ^[$E]$T, key : T) -> (E, bool) {
+    index, found := slice.linear_search(slice.enumerated_array(array), key)
+    return E(index), found
+}
+
 
 
 
@@ -67,4 +75,5 @@ eat_bytes :: proc(slice : ^[]u8, length : $T) -> []u8 where intrinsics.type_is_i
 ////////////////////////////////////////////////////////////////////////////////
 
 import "core:mem"
+import "core:slice"
 import "base:intrinsics"
