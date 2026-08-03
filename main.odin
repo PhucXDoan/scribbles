@@ -106,13 +106,13 @@ main :: proc() {
 
 
     entities := [dynamic; 16]Entity {
-        Entity_Kind.nil        = {}, // TODO Simplify maybe when fixed: https://github.com/odin-lang/Odin/issues/7135
-        Entity_Kind.Rolypoly   = {},
-        Entity_Kind.Easel      = {},
-        Entity_Kind.Merowchant = {},
+        Entity_Kind_Static.nil        = {}, // TODO Simplify maybe when fixed: https://github.com/odin-lang/Odin/issues/7135
+        Entity_Kind_Static.Rolypoly   = {},
+        Entity_Kind_Static.Easel      = {},
+        Entity_Kind_Static.Merowchant = {},
     }
 
-    entities[Entity_Kind.Rolypoly] = {
+    entities[Entity_Kind_Static.Rolypoly] = {
         kind                  = .Rolypoly,
         base_position         = { 0, 0 },
         origin                = { 0, 0 },
@@ -122,7 +122,7 @@ main :: proc() {
         mouse_click_animation = { duration = 0.25 },
     }
 
-    entities[Entity_Kind.Easel] = {
+    entities[Entity_Kind_Static.Easel] = {
         kind                  = .Easel,
         base_position         = { 7.5, -1 },
         origin                = { 0, -1 },
@@ -135,7 +135,7 @@ main :: proc() {
         pet_cost              = 100,
     }
 
-    entities[Entity_Kind.Merowchant] = Entity {
+    entities[Entity_Kind_Static.Merowchant] = Entity {
         kind                  = .Merowchant,
         base_position         = { -6, 1 },
         origin                = { 0, -1 },
@@ -177,7 +177,7 @@ main :: proc() {
 
     for &entity in entities { // Age the entities.
 
-        #partial switch entity.kind {
+        switch entity.kind {
 
             case .Flimsy_Friend: {
 
@@ -336,7 +336,7 @@ main :: proc() {
 
             entity.age += time.Duration(raylib.GetFrameTime() * f32(time.Second))
 
-            #partial switch entity.kind {
+            switch entity.kind {
 
                 case .Flimsy_Friend: {
 
@@ -360,15 +360,15 @@ main :: proc() {
 
             // Handle walking.
 
-            #partial switch entity.kind {
+            switch entity.kind {
 
                 case .Flimsy_Friend: {
 
                     if !entity.walk_animation.running && entity.walk_displacement == {} && entity.walk_delay <= 0 {
 
                         entity.walk_displacement = 0.5 * World_Vector2(raylib.Vector2Normalize({ // TODO Something better.
-                            entities[Entity_Kind.Rolypoly].base_position.x + f32(math.cos(time.duration_minutes(entity.age))) * 4 - entity.base_position.x,
-                            entities[Entity_Kind.Rolypoly].base_position.y + f32(math.sin(time.duration_minutes(entity.age))) * 4 - entity.base_position.y,
+                            entities[Entity_Kind_Static.Rolypoly].base_position.x + f32(math.cos(time.duration_minutes(entity.age))) * 4 - entity.base_position.x,
+                            entities[Entity_Kind_Static.Rolypoly].base_position.y + f32(math.sin(time.duration_minutes(entity.age))) * 4 - entity.base_position.y,
                         }))
 
                         entity.walk_delay = FLIMSY_FRIEND_EXPECTED_WALK_DELAY_SECONDS * 2 * rand.float32()
@@ -386,7 +386,7 @@ main :: proc() {
 
                         if scene == .Main {
 
-                            #partial switch entity.kind {
+                            switch entity.kind {
 
 
 
@@ -466,9 +466,9 @@ main :: proc() {
                         ),
                         font     = .Sniglet,
                         position =  Rendering_Vector2_Screen(to_screen_for_rectangle_uv(
-                            entities[Entity_Kind.Rolypoly].rendering_position,
-                            entities[Entity_Kind.Rolypoly].rendering_dimensions,
-                            entities[Entity_Kind.Rolypoly].origin,
+                            entities[Entity_Kind_Static.Rolypoly].rendering_position,
+                            entities[Entity_Kind_Static.Rolypoly].rendering_dimensions,
+                            entities[Entity_Kind_Static.Rolypoly].origin,
                             { 0.75, 0.75 },
                         )),
                     })
@@ -477,7 +477,7 @@ main :: proc() {
 
             }
 
-            #partial switch entity.kind {
+            switch entity.kind {
 
                 case .Rolypoly: {
                     raylib.SetMouseCursor(( // TODO Factor out.
@@ -522,7 +522,7 @@ main :: proc() {
 
                 } else {
 
-                    #partial switch entity.kind {
+                    switch entity.kind {
 
                         case .Rolypoly: {
                             new_pets_for_rolypoly += 1
@@ -618,7 +618,7 @@ main :: proc() {
 
             entity := &entities[entity_index]
 
-            #partial switch entity.kind {
+            switch entity.kind {
 
                 case .Flimsy_Friend: {
                     raylib.UnloadTexture(entity.texture_reference.(raylib.Texture))
@@ -638,7 +638,7 @@ main :: proc() {
 
             game_state.pets += new_pets_for_rolypoly
 
-            control_animation(&entities[Entity_Kind.Rolypoly].mouse_click_animation, .Clear_Increase_Reset)
+            control_animation(&entities[Entity_Kind_Static.Rolypoly].mouse_click_animation, .Clear_Increase_Reset)
 
             if scene == .Main {
 
@@ -1389,19 +1389,21 @@ Entity :: struct {
 
 }
 
-Entity_Kind :: enum {
+Entity_Kind :: union {
+    Entity_Kind_Static,
+    Entity_Kind_Dynamic,
+}
 
+Entity_Kind_Static :: enum {
     nil,
-
-    // These entities are fixed; they are spawned at initialization
-    // and should never be removed. They can be directly indexed for.
     Rolypoly,
     Easel,
     Merowchant,
+}
 
-    // These entities are volatile; they can spawn and despawn at any time.
+Entity_Kind_Dynamic :: enum {
+    nil,
     Flimsy_Friend,
-
 }
 
 FLIMSY_FRIEND_CLICKS_TO_POP                   :: 5

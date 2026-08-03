@@ -124,9 +124,9 @@ read_save :: proc(
 
                 }
 
-                entities[Entity_Kind.Easel     ].locked = !game_state.SAVE_easel_unlocked
-                entities[Entity_Kind.Merowchant].locked = !game_state.SAVE_merowchant_unlocked
-                duration_since_last_game                = time.diff(game_state.SAVE_timestamp.? or_else time.now(), time.now())
+                entities[Entity_Kind_Static.Easel     ].locked = !game_state.SAVE_easel_unlocked
+                entities[Entity_Kind_Static.Merowchant].locked = !game_state.SAVE_merowchant_unlocked
+                duration_since_last_game                       = time.diff(game_state.SAVE_timestamp.? or_else time.now(), time.now())
 
             }
 
@@ -206,8 +206,8 @@ write_save :: proc(
     // Update game state's save info.
 
     game_state.SAVE_timestamp           = time.now()
-    game_state.SAVE_easel_unlocked      = !entities[Entity_Kind.Easel     ].locked
-    game_state.SAVE_merowchant_unlocked = !entities[Entity_Kind.Merowchant].locked
+    game_state.SAVE_easel_unlocked      = !entities[Entity_Kind_Static.Easel     ].locked
+    game_state.SAVE_merowchant_unlocked = !entities[Entity_Kind_Static.Merowchant].locked
 
 
 
@@ -252,7 +252,7 @@ write_save :: proc(
 
     for entity in entities {
 
-        #partial switch entity.kind {
+        switch entity.kind {
 
             case .Flimsy_Friend: {
 
