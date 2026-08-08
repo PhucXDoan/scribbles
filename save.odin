@@ -101,7 +101,7 @@ read_save :: proc(
 
     for len(remainder) >= 1 {
 
-        save_file_header := eat(&remainder, Save_File_Header)
+        save_file_header := op.eat(&remainder, Save_File_Header)
 
         switch header in save_file_header {
 
@@ -114,7 +114,7 @@ read_save :: proc(
                 assert(game_state == {})
                 assert(header.version >= 1)
 
-                saved_game_state := eat(&remainder, Game_State_Vx)
+                saved_game_state := op.eat(&remainder, Game_State_Vx)
 
                 switch state in saved_game_state {
 
@@ -139,7 +139,7 @@ read_save :: proc(
                 assert(easel_canvas_image == {})
                 assert(header.version >= 1)
 
-                image_data         := eat(&remainder, int(header.length))
+                image_data         := op.eat(&remainder, int(header.length))
                 easel_canvas_image  = raylib.LoadImageFromMemory(".png", raw_data(image_data), i32(len(image_data)))
 
             }
@@ -152,7 +152,7 @@ read_save :: proc(
 
                 assert(header.version >= 1)
 
-                image_data := eat(&remainder, int(header.image_length))
+                image_data := op.eat(&remainder, int(header.image_length))
                 image      := raylib.LoadImageFromMemory(".png", raw_data(image_data), i32(len(image_data)))
                 defer raylib.UnloadImage(image)
 
@@ -292,3 +292,4 @@ import "core:fmt"
 import "core:time"
 import "core:mem"
 import "vendor:raylib"
+import "op"

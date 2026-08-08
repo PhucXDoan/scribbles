@@ -448,7 +448,7 @@ main :: proc() {
 
                 if entity.mouse_hover_animation.value == 1 {
 
-                    push(&rendering_tasks, Rendering_Task_Dialogue_Bubble {
+                    op.push(&rendering_tasks, Rendering_Task_Dialogue_Bubble {
                         text = (
                             game_state.pets < entity.pet_cost
                                 ? fmt.ctprintf("I need {} pets...", entity.pet_cost)
@@ -556,7 +556,7 @@ main :: proc() {
             // Mark the entity to be deleted if needed.
 
             if should_be_removed {
-                push(&to_be_removed_entities, entity_i)
+                op.push(&to_be_removed_entities, entity_i)
             }
 
 
@@ -565,7 +565,7 @@ main :: proc() {
 
             if !should_be_removed && scene == .Main {
 
-                push(&rendering_tasks, Rendering_Task_Texture {
+                op.push(&rendering_tasks, Rendering_Task_Texture {
                     reference  = entity.texture_reference,
                     position   = entity.rendering_position,
                     dimensions = entity.rendering_dimensions,
@@ -575,7 +575,7 @@ main :: proc() {
 
                 if entity.locked {
 
-                    push(&rendering_tasks, Rendering_Task_Texture {
+                    op.push(&rendering_tasks, Rendering_Task_Texture {
                         reference  = .Padlock,
                         position   = Rendering_Vector2_Screen(to_screen_for_rectangle_uv(
                             entity.rendering_position,
@@ -803,7 +803,7 @@ main :: proc() {
 
             if hovering_merowchant_cat {
 
-                push(&rendering_tasks, Rendering_Task_Dialogue_Bubble {
+                op.push(&rendering_tasks, Rendering_Task_Dialogue_Bubble {
                     text     = "i dont have anything right now...",
                     font     = .Sniglet,
                     position = Rendering_Vector2_Screen {
@@ -862,7 +862,7 @@ main :: proc() {
         // Display version info.
         //
 
-        push(&rendering_tasks, Rendering_Task_Text {
+        op.push(&rendering_tasks, Rendering_Task_Text {
             text     = fmt.ctprintf("Pets: {}", game_state.pets),
             font     = .Sniglet,
             position = Rendering_Vector2_UV { -0.975, 0.975 },
@@ -870,7 +870,7 @@ main :: proc() {
             size     = 40,
         })
 
-        push(&rendering_tasks, Rendering_Task_Text {
+        op.push(&rendering_tasks, Rendering_Task_Text {
             text     = #config(VERSION, "???"),
             font     = .Sniglet,
             position = Rendering_Vector2_UV { 1, 1 },
@@ -919,7 +919,7 @@ main :: proc() {
                         to_uv_from_screen(dev_input.mouse).y,
                     )
 
-                    push(&rendering_tasks, Rendering_Task_Text {
+                    op.push(&rendering_tasks, Rendering_Task_Text {
                         font                                = .SpaceMono,
                         position                            = dev_input.mouse,
                         origin                              = { 0, -1 },
@@ -981,14 +981,14 @@ main :: proc() {
                             bottom_right  = start + dimensions
                         }
 
-                        push(&rendering_tasks, Rendering_Task_Rectangle {
+                        op.push(&rendering_tasks, Rendering_Task_Rectangle {
                             position   = top_left,
                             dimensions = bottom_right - top_left,
                             origin     = { -1, 1 },
                             stroke     = raylib.Color { 81, 194, 25, 255 },
                         })
 
-                        push(&rendering_tasks, Rendering_Task_Line { // Horizontal line.
+                        op.push(&rendering_tasks, Rendering_Task_Line { // Horizontal line.
                             color      = raylib.Color { 81, 194, 25, 255 },
                             positions  = {
                                 Rendering_Vector2_Screen { top_left.x    , (top_left.y + bottom_right.y) / 2 },
@@ -996,7 +996,7 @@ main :: proc() {
                             },
                         })
 
-                        push(&rendering_tasks, Rendering_Task_Line { // Vertical line.
+                        op.push(&rendering_tasks, Rendering_Task_Line { // Vertical line.
                             color      = raylib.Color { 81, 194, 25, 255 },
                             positions  = {
                                 Rendering_Vector2_Screen { (top_left.x + bottom_right.x) / 2, top_left.y     },
@@ -1042,7 +1042,7 @@ main :: proc() {
 
             if scene == .Easel {
 
-                push(&rendering_tasks, Rendering_Task_Texture {
+                op.push(&rendering_tasks, Rendering_Task_Texture {
                     reference  = easel_canvas_texture,
                     position   = Rendering_Vector2_Screen { easel_canvas_dest.x, easel_canvas_dest.y }, // TODO.
                     dimensions = Rendering_Vector2_Screen { easel_canvas_dest.width, easel_canvas_dest.height }, // TODO.
@@ -1050,7 +1050,7 @@ main :: proc() {
 
                 if hovered_easel_canvas_cell_is_within {
 
-                    push(&rendering_tasks, Rendering_Task_Rectangle {
+                    op.push(&rendering_tasks, Rendering_Task_Rectangle {
                         position = Rendering_Vector2_Screen { // TODO.
                             (easel_canvas_dest.x - easel_canvas_origin.x + f32(hovered_easel_canvas_cell_coordinate_x) * easel_canvas_cell_dimensions.x),
                             (easel_canvas_dest.y - easel_canvas_origin.y + f32(hovered_easel_canvas_cell_coordinate_y) * easel_canvas_cell_dimensions.y),
@@ -1087,7 +1087,7 @@ main :: proc() {
 
                     requirement_text := strings.to_cstring(&builder)
 
-                    push(&rendering_tasks, Rendering_Task_Text {
+                    op.push(&rendering_tasks, Rendering_Task_Text {
                         text       = requirement_text,
                         font       = .Sniglet,
                         position   = Rendering_Vector2_UV { -0.9, 0.5 },
@@ -1277,7 +1277,7 @@ render_button_widget :: proc(
 
         case Button_Widget_Style_Lame: {
 
-            push(rendering_tasks, Rendering_Task_Rectangle {
+            op.push(rendering_tasks, Rendering_Task_Rectangle {
                 position          = Rendering_Vector2_Screen { bounding_box.x    , bounding_box.y      },
                 dimensions        = Rendering_Vector2_Screen { bounding_box.width, bounding_box.height },
                 origin            = { -1, 1 },
@@ -1286,7 +1286,7 @@ render_button_widget :: proc(
                 outline_thickness = BUTTON_WIDGET_STYLE_LAME_OUTLINE,
             })
 
-            push(rendering_tasks, Rendering_Task_Text {
+            op.push(rendering_tasks, Rendering_Task_Text {
                 position = button.position,
                 text     = style.text,
                 font     = style.font,
@@ -1298,7 +1298,7 @@ render_button_widget :: proc(
 
         case Button_Widget_Style_Texture: {
 
-            push(rendering_tasks, Rendering_Task_Texture {
+            op.push(rendering_tasks, Rendering_Task_Texture {
                 reference  = style.reference,
                 position   = Rendering_Vector2_Screen { bounding_box.x    , bounding_box.y      },
                 dimensions = Rendering_Vector2_Screen { bounding_box.width, bounding_box.height },
@@ -1434,7 +1434,7 @@ create_flimsy_friend :: proc(
     age      : time.Duration,
     position : Maybe(World_Vector2),
 ) {
-    push(entities, Entity {
+    op.push(entities, Entity {
         kind          = .Flimsy_Friend,
         base_position = position.? or_else {
             -5 + f32(len(entities)) * 1,
@@ -1548,3 +1548,4 @@ import "core:math"
 import "core:math/rand"
 import "core:time"
 import "vendor:raylib"
+import "op"

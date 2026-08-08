@@ -224,8 +224,8 @@ bake :: proc(save_static_entity_data : bool, entities : []Entity) {
 
             for asset_handle in Baked_XYZ {
 
-                asset_size := eat(remainder, i32       )^
-                asset_data := eat(remainder, asset_size)
+                asset_size := op.eat(remainder, i32       )^
+                asset_data := op.eat(remainder, asset_size)
 
                 if asset_handle != nil {
 
@@ -282,7 +282,7 @@ bake :: proc(save_static_entity_data : bool, entities : []Entity) {
         // Static entities.
 
         for static_entity_kind in Static_Entity_Kind {
-            entities[static_entity_kind].bakeable_fields = eat(&remainder, Bakeable_Entity_Fields)^
+            entities[static_entity_kind].bakeable_fields = op.eat(&remainder, Bakeable_Entity_Fields)^
         }
 
     }
@@ -303,3 +303,4 @@ import "core:slice"
 import "core:encoding/json"
 import "base:runtime"
 import "vendor:raylib"
+import "op"
