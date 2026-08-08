@@ -7,25 +7,13 @@ package op
 
 
 push :: proc {
-    push_fixed_capacity_dynamic_array_element,
     push_fixed_capacity_dynamic_array_elements,
-    push_dynamic_array_element,
     push_dynamic_array_elements,
-}
-
-push_fixed_capacity_dynamic_array_element :: proc(array : ^[dynamic; $N]$T, #no_broadcast element : T) {
-    amount := append(array, element)
-    assert(amount == 1)
 }
 
 push_fixed_capacity_dynamic_array_elements :: proc(array : ^[dynamic; $N]$T, #no_broadcast elements : ..T) {
     amount := append(array, ..elements)
     assert(amount == len(elements))
-}
-
-push_dynamic_array_element :: proc(array : ^[dynamic]$T, #no_broadcast element : T) {
-    amount, _ := append(array, element)
-    assert(amount == 1)
 }
 
 push_dynamic_array_elements :: proc(array : ^[dynamic]$T, #no_broadcast elements : ..T) {
