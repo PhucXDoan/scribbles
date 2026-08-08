@@ -82,7 +82,7 @@ bake :: proc(save_static_entity_data : bool, entities : []Entity) {
 
 
 
-    // Save static entity data.
+    // Save the bakeable fields of static entities.
 
     when ODIN_DEBUG {{
 
@@ -90,11 +90,17 @@ bake :: proc(save_static_entity_data : bool, entities : []Entity) {
 
             for static_entity_kind in Static_Entity_Kind {
 
-                file_path    := fmt.tprintf("{}/{}", BAKED_STATIC_ENTITY_DIRECTORY_PATH, static_entity_kind)
+                file_path := fmt.tprintf("{}/{}.json", BAKED_STATIC_ENTITY_DIRECTORY_PATH, static_entity_kind)
+
+                fmt.printf("Updating `{}`...`\n", file_path)
+
                 file_content := json.marshal(
-                    v         = entities[static_entity_kind].bakeable_fields,
-                    opt       = { pretty = true, use_spaces = true },
-                    allocator = context.temp_allocator,
+                    entities[static_entity_kind].bakeable_fields,
+                    {
+                        pretty     = true,
+                        use_spaces = true,
+                    },
+                    context.temp_allocator,
                 ) or_else panic("Failed.")
 
                 if os.write_entire_file(file_path, file_content) != nil {
@@ -172,15 +178,16 @@ bake :: proc(save_static_entity_data : bool, entities : []Entity) {
 
         for static_entity_kind in Static_Entity_Kind {
 
-            static_entity_file_path := fmt.tprintf("{}/{}", BAKED_STATIC_ENTITY_DIRECTORY_PATH, static_entity_kind)
-
-            bakable_entity_fields : Bakeable_Entity_Fields
-
-            if json.unmarshal(
-                data      = os.read_entire_file(static_entity_file_path, context.temp_allocator) or_else panic("Failed."),
+            static_entity_file_path    := fmt.tprintf("{}/{}.json", BAKED_STATIC_ENTITY_DIRECTORY_PATH, static_entity_kind)
+            static_entity_file_content := os.read_entire_file(static_entity_file_path, context.temp_allocator) or_else panic("Failed.")
+            bakable_entity_fields      :  Bakeable_Entity_Fields
+            error                      := json.unmarshal(
+                data      = static_entity_file_content,
                 ptr       = &bakable_entity_fields,
                 allocator = context.temp_allocator,
-            ) != nil {
+            )
+
+            if error != nil {
                 panic("Failed.")
             }
 
@@ -297,8 +304,6 @@ import "core:fmt"
 import "core:os"
 import "core:reflect"
 import "core:mem"
-import "core:slice"
 import "core:encoding/json"
-import "base:runtime"
 import "vendor:raylib"
 import "op"

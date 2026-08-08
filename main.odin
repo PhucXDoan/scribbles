@@ -4,6 +4,8 @@ main :: proc() {
 
 
 
+
+
     ////////////////////////////////////////////////////////////////////////////////
     //
     // Lower level initializations.
@@ -20,6 +22,17 @@ main :: proc() {
     defer raylib.CloseAudioDevice()
 
     raylib.SetExitKey(nil)
+
+
+
+
+
+    ////////////////////////////////////////////////////////////////////////////////
+    //
+    // Game state initializations.
+    //
+    // TODO Clean up.
+    //
 
     entities := [dynamic; 16]Entity {
         Static_Entity_Kind.nil        = {}, // TODO Simplify maybe when fixed: https://github.com/odin-lang/Odin/issues/7135
@@ -61,15 +74,6 @@ main :: proc() {
     )
 
 
-
-
-
-    ////////////////////////////////////////////////////////////////////////////////
-    //
-    // Game state initializations.
-    //
-    // TODO Clean up.
-    //
 
     Scene :: enum {
         Main,
@@ -197,6 +201,12 @@ main :: proc() {
 
 
 
+
+        main_input, dev_input := get_input(dev_focus = (dev_tool != nil))
+
+
+
+
         ////////////////////////////////////////////////////////////////////////////////
         //
         // Auto-save.
@@ -206,10 +216,23 @@ main :: proc() {
         should_save_game  := true // Always save the game on start up.
         should_close      := raylib.WindowShouldClose()
         should_save_game ||= should_close || time.diff(game_state.SAVE_timestamp.? or_else {}, time.now()) >= 60 * time.Second
+        should_save_game ||= .Control_Left in main_input.down && .S in main_input.pressed
 
         if should_save_game {
+
             should_save_game = false
+
             write_save(&game_state, entities, easel_canvas_image)
+
+            when ODIN_DEBUG {
+
+                bake(
+                    save_static_entity_data = true,
+                    entities                = entities[:],
+                )
+
+            }
+
         }
 
 
@@ -225,10 +248,10 @@ main :: proc() {
 
         rendering_tasks : [dynamic; 32]Rendering_Task
 
-        main_input, dev_input := get_input(dev_focus = (dev_tool != nil))
 
-
-
+        if .Mouse_Middle in main_input.pressed {
+            entities[Static_Entity_Kind.Rolypoly].base_position = to_world_from_screen(main_input.mouse)
+        }
 
 
         ////////////////////////////////////////////////////////////////////////////////
@@ -288,10 +311,7 @@ main :: proc() {
 
             {
 
-                rendering_position := op.V2_Squared { // TODO Into function.
-                    entity.base_position.x * 0.1,
-                    entity.base_position.y * 0.1,
-                }
+                rendering_position := to_screen_from_world_for_position(entity.base_position)
 
                 if entity.walk_animation.running {
 
@@ -842,18 +862,6 @@ main :: proc() {
             raylib.PlaySound(BAKED_SOUNDS[.Merowchant_Close])
         }
 
-        if .Space in main_input.pressed {
-
-            entities[Static_Entity_Kind.Rolypoly].base_position.x += 0.05
-
-            bake(
-                save_static_entity_data = true,
-                entities                = entities[:],
-            )
-
-        }
-
-
 
 
 
@@ -910,13 +918,16 @@ main :: proc() {
                     text := fmt.ctprintf(
                         "    mouse : {{ {}, {} }}"     + "\n" +
                         "  squared : {{ %.2f, %.2f }}" + "\n" +
-                        "  uniform : {{ %.2f, %.2f }}",
+                        "  uniform : {{ %.2f, %.2f }}" + "\n" +
+                        "    world : {{ %.2f, %.2f }}",
                         dev_input.mouse.x,
                         dev_input.mouse.y,
                         op.to_squared_from_screen(dev_input.mouse).x,
                         op.to_squared_from_screen(dev_input.mouse).y,
                         op.to_uniform_from_screen(dev_input.mouse).x,
                         op.to_uniform_from_screen(dev_input.mouse).y,
+                        to_world_from_screen(dev_input.mouse).x,
+                        to_world_from_screen(dev_input.mouse).y,
                     )
 
                     op.push(&rendering_tasks, Rendering_Task_Text {
@@ -1419,6 +1430,17 @@ FLIMSY_FRIEND_EXPECTED_PETS_PER_SECOND        :: 1 / (FLIMSY_FRIEND_EXPECTED_WAL
 
 World_Vector2 :: distinct raylib.Vector2
 
+to_screen_from_world_for_position :: proc(position : World_Vector2) -> op.V2_Screen {
+    return op.to_screen_for_position(op.V2_Squared {
+        position.x * 0.1,
+        position.y * 0.1,
+    })
+}
+
+to_world_from_screen :: proc(position : op.V2_Screen) -> World_Vector2 {
+    return World_Vector2(op.to_squared_from_screen(position) / 0.1)
+}
+
 
 
 
@@ -1468,11 +1490,39 @@ Input :: struct {
 
 Input_Button :: enum {
     Mouse_Left,
+    Mouse_Middle,
     Mouse_Right,
     Escape,
     Function_1,
     Alt_Left,
+    Control_Left,
     Space,
+    A,
+    B,
+    C,
+    D,
+    E,
+    F,
+    G,
+    H,
+    I,
+    J,
+    K,
+    L,
+    M,
+    N,
+    O,
+    P,
+    Q,
+    R,
+    S,
+    T,
+    U,
+    V,
+    W,
+    X,
+    Y,
+    Z,
 }
 
 get_input :: proc(dev_focus : bool) -> (
@@ -1488,12 +1538,40 @@ get_input :: proc(dev_focus : bool) -> (
     }
 
     for enumeration, button in ([Input_Button]union { raylib.KeyboardKey, raylib.MouseButton } {
-        .Mouse_Left  = raylib.MouseButton.LEFT,
-        .Mouse_Right = raylib.MouseButton.RIGHT,
-        .Escape      = raylib.KeyboardKey.ESCAPE,
-        .Function_1  = raylib.KeyboardKey.F1,
-        .Alt_Left    = raylib.KeyboardKey.LEFT_ALT,
-        .Space       = raylib.KeyboardKey.SPACE,
+        .Mouse_Left   = raylib.MouseButton.LEFT,
+        .Mouse_Middle = raylib.MouseButton.MIDDLE,
+        .Mouse_Right  = raylib.MouseButton.RIGHT,
+        .Escape       = raylib.KeyboardKey.ESCAPE,
+        .Function_1   = raylib.KeyboardKey.F1,
+        .Alt_Left     = raylib.KeyboardKey.LEFT_ALT,
+        .Control_Left = raylib.KeyboardKey.LEFT_CONTROL,
+        .Space        = raylib.KeyboardKey.SPACE,
+        .A            = raylib.KeyboardKey.A,
+        .B            = raylib.KeyboardKey.B,
+        .C            = raylib.KeyboardKey.C,
+        .D            = raylib.KeyboardKey.D,
+        .E            = raylib.KeyboardKey.E,
+        .F            = raylib.KeyboardKey.F,
+        .G            = raylib.KeyboardKey.G,
+        .H            = raylib.KeyboardKey.H,
+        .I            = raylib.KeyboardKey.I,
+        .J            = raylib.KeyboardKey.J,
+        .K            = raylib.KeyboardKey.K,
+        .L            = raylib.KeyboardKey.L,
+        .M            = raylib.KeyboardKey.M,
+        .N            = raylib.KeyboardKey.N,
+        .O            = raylib.KeyboardKey.O,
+        .P            = raylib.KeyboardKey.P,
+        .Q            = raylib.KeyboardKey.Q,
+        .R            = raylib.KeyboardKey.R,
+        .S            = raylib.KeyboardKey.S,
+        .T            = raylib.KeyboardKey.T,
+        .U            = raylib.KeyboardKey.U,
+        .V            = raylib.KeyboardKey.V,
+        .W            = raylib.KeyboardKey.W,
+        .X            = raylib.KeyboardKey.X,
+        .Y            = raylib.KeyboardKey.Y,
+        .Z            = raylib.KeyboardKey.Z,
     }) {
 
         switch e in enumeration {
