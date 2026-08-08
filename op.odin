@@ -92,140 +92,140 @@ defer_reset_default_temp_allocator :: runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD
 
 
 
-V2_Pixel   :: distinct [2]f32
+V2_Screen  :: distinct [2]f32
 V2_Uniform :: distinct [2]f32
 V2_Squared :: distinct [2]f32
 V2_Render  :: union {
-    V2_Pixel,
+    V2_Screen,
     V2_Uniform,
     V2_Squared,
 }
 
 
 
-to_pixel_for_position :: proc {
-    to_pixel_from_squared_for_position,
-    to_pixel_from_uniform_for_position,
-    to_pixel_from_pixel_for_position,
-    to_pixel_from_render_for_position,
+to_screen_for_position :: proc {
+    to_screen_from_squared_for_position,
+    to_screen_from_uniform_for_position,
+    to_screen_from_screen_for_position,
+    to_screen_from_render_for_position,
 }
 
-to_pixel_from_squared_for_position :: proc(position : V2_Squared) -> V2_Pixel {
+to_screen_from_squared_for_position :: proc(position : V2_Squared) -> V2_Screen {
     return {
         (f32(raylib.GetScreenWidth ()) + position.x * f32(raylib.GetScreenWidth())) / 2,
         (f32(raylib.GetScreenHeight()) - position.y * f32(raylib.GetScreenWidth())) / 2,
     }
 }
 
-to_pixel_from_uniform_for_position :: proc(position : V2_Uniform) -> V2_Pixel {
+to_screen_from_uniform_for_position :: proc(position : V2_Uniform) -> V2_Screen {
     return {
         (f32(raylib.GetScreenWidth ()) + position.x * f32(raylib.GetScreenWidth ())) / 2,
         (f32(raylib.GetScreenHeight()) - position.y * f32(raylib.GetScreenHeight())) / 2,
     }
 }
 
-to_pixel_from_pixel_for_position :: proc(position : V2_Pixel) -> V2_Pixel {
+to_screen_from_screen_for_position :: proc(position : V2_Screen) -> V2_Screen {
     return {
         position.x,
         position.y,
     }
 }
 
-to_pixel_from_render_for_position :: proc(position : V2_Render) -> V2_Pixel {
+to_screen_from_render_for_position :: proc(position : V2_Render) -> V2_Screen {
     switch p in position {
-        case V2_Squared : return to_pixel_from_squared_for_position(p)
-        case V2_Uniform : return to_pixel_from_uniform_for_position(p)
-        case V2_Pixel   : return to_pixel_from_pixel_for_position(p)
+        case V2_Squared : return to_screen_from_squared_for_position(p)
+        case V2_Uniform : return to_screen_from_uniform_for_position(p)
+        case V2_Screen  : return to_screen_from_screen_for_position(p)
         case            : panic("Invalid.")
     }
 }
 
 
 
-to_pixel_for_dimensions :: proc {
-    to_pixel_from_squared_for_dimensions,
-    to_pixel_from_uniform_for_dimensions,
-    to_pixel_from_pixel_for_dimensions,
-    to_pixel_from_render_for_dimensions,
+to_screen_for_dimensions :: proc {
+    to_screen_from_squared_for_dimensions,
+    to_screen_from_uniform_for_dimensions,
+    to_screen_from_screen_for_dimensions,
+    to_screen_from_render_for_dimensions,
 }
 
-to_pixel_from_squared_for_dimensions :: proc(d : V2_Squared) -> V2_Pixel {
+to_screen_from_squared_for_dimensions :: proc(d : V2_Squared) -> V2_Screen {
     return {
         d.x * f32(raylib.GetScreenWidth()),
         d.y * f32(raylib.GetScreenWidth()),
     }
 }
 
-to_pixel_from_uniform_for_dimensions :: proc(d : V2_Uniform) -> V2_Pixel {
+to_screen_from_uniform_for_dimensions :: proc(d : V2_Uniform) -> V2_Screen {
     return {
         d.x * f32(raylib.GetScreenWidth ()),
         d.y * f32(raylib.GetScreenHeight()),
     }
 }
 
-to_pixel_from_pixel_for_dimensions :: proc(d : V2_Pixel) -> V2_Pixel {
+to_screen_from_screen_for_dimensions :: proc(d : V2_Screen) -> V2_Screen {
     return {
         d.x,
         d.y,
     }
 }
 
-to_pixel_from_render_for_dimensions :: proc(dimensions : V2_Render) -> V2_Pixel {
+to_screen_from_render_for_dimensions :: proc(dimensions : V2_Render) -> V2_Screen {
     switch d in dimensions {
-        case V2_Squared : return to_pixel_from_squared_for_dimensions(d)
-        case V2_Uniform : return to_pixel_from_uniform_for_dimensions(d)
-        case V2_Pixel   : return to_pixel_from_pixel_for_dimensions(d)
+        case V2_Squared : return to_screen_from_squared_for_dimensions(d)
+        case V2_Uniform : return to_screen_from_uniform_for_dimensions(d)
+        case V2_Screen  : return to_screen_from_screen_for_dimensions(d)
         case            : panic("Invalid.")
     }
 }
 
 
 
-to_pixel_for_rectangle :: proc(
+to_screen_for_rectangle :: proc(
     position   : V2_Render,
     dimensions : V2_Render,
     origin     : V2_Uniform,
 ) -> raylib.Rectangle {
 
-    pixel_position   := to_pixel_for_position(position)
-    pixel_dimensions := to_pixel_for_dimensions(dimensions)
+    screen_position   := to_screen_for_position(position)
+    screen_dimensions := to_screen_for_dimensions(dimensions)
 
     return {
-        pixel_position.x + pixel_dimensions.x * (-1 - origin.x) / 2,
-        pixel_position.y - pixel_dimensions.y * (+1 - origin.y) / 2,
-        pixel_dimensions.x,
-        pixel_dimensions.y,
+        screen_position.x + screen_dimensions.x * (-1 - origin.x) / 2,
+        screen_position.y - screen_dimensions.y * (+1 - origin.y) / 2,
+        screen_dimensions.x,
+        screen_dimensions.y,
     }
 
 }
 
-to_pixel_for_rectangle_position :: proc(
+to_screen_for_rectangle_position :: proc(
     position   : V2_Render,
     dimensions : V2_Render,
     origin     : V2_Uniform,
     center     : V2_Uniform,
-) -> V2_Pixel {
+) -> V2_Screen {
 
-    pixel_position   := to_pixel_for_position(position)
-    pixel_dimensions := to_pixel_for_dimensions(dimensions)
+    screen_position   := to_screen_for_position(position)
+    screen_dimensions := to_screen_for_dimensions(dimensions)
 
     return {
-        pixel_position.x + pixel_dimensions.x * (center.x - origin.x) / 2,
-        pixel_position.y - pixel_dimensions.y * (center.y - origin.y) / 2,
+        screen_position.x + screen_dimensions.x * (center.x - origin.x) / 2,
+        screen_position.y - screen_dimensions.y * (center.y - origin.y) / 2,
     }
 
 }
 
 
 
-to_squared_from_pixel :: proc(position : V2_Pixel) -> V2_Squared {
+to_squared_from_screen :: proc(position : V2_Screen) -> V2_Squared {
     return {
         +(position.x * 2 - f32(raylib.GetScreenWidth ())) / f32(raylib.GetScreenWidth()),
         -(position.y * 2 - f32(raylib.GetScreenHeight())) / f32(raylib.GetScreenWidth()),
     }
 }
 
-to_uniform_from_pixel :: proc(position : V2_Pixel) -> V2_Uniform {
+to_uniform_from_screen :: proc(position : V2_Screen) -> V2_Uniform {
     return {
         +(position.x * 2 - f32(raylib.GetScreenWidth ())) / f32(raylib.GetScreenWidth ()),
         -(position.y * 2 - f32(raylib.GetScreenHeight())) / f32(raylib.GetScreenHeight()),
