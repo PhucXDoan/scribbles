@@ -89,7 +89,7 @@ main :: proc() {
     }
 
     Dev_Tool_Coordinate_Display :: struct {
-        anchors         : [2]Maybe(Rendering_Vector2_Screen),
+        anchors         : [2]Maybe(op.V2_Screen),
         centered_origin : bool,
     }
 
@@ -99,7 +99,7 @@ main :: proc() {
 
     merowchant_back_button := Button_Widget {
 
-        position = Rendering_Vector2_UV { -0.9, -0.9 },
+        position = op.V2_Uniform { -0.9, -0.9 },
 
         style = Button_Widget_Style_Lame {
             text = "Back",
@@ -113,7 +113,7 @@ main :: proc() {
 
     easel_canvas_back_button := Button_Widget {
 
-        position = Rendering_Vector2_UV { -0.15, -0.7 },
+        position = op.V2_Uniform { -0.15, -0.7 },
 
         style = Button_Widget_Style_Lame {
             text = "Back",
@@ -127,10 +127,10 @@ main :: proc() {
 
     easel_canvas_submit_button := Button_Widget {
 
-        position = Rendering_Vector2_UV { 0.15, -0.7 },
+        position = op.V2_Uniform { 0.15, -0.7 },
 
         style = Button_Widget_Style_Texture {
-            dimensions = Rendering_Vector2_Cartesian { 0.075, 0.035 },
+            dimensions = op.V2_Squared { 0.075, 0.035 },
             reference  = .Submit_Button,
         },
 
@@ -253,7 +253,7 @@ main :: proc() {
 
             {
 
-                rendering_dimensions := Rendering_Vector2_Cartesian { // TODO Into function.
+                rendering_dimensions := op.V2_Squared { // TODO Into function.
                     entity.base_dimensions.x * 0.1 / 2,
                     entity.base_dimensions.y * 0.1 / 2,
                 }
@@ -288,7 +288,7 @@ main :: proc() {
 
             {
 
-                rendering_position := Rendering_Vector2_Cartesian { // TODO Into function.
+                rendering_position := op.V2_Squared { // TODO Into function.
                     entity.base_position.x * 0.1,
                     entity.base_position.y * 0.1,
                 }
@@ -314,7 +314,7 @@ main :: proc() {
             // With the rendering position and dimensions determined,
             // we know the screen bounding box of the entity.
 
-            bounding_box := to_screen_for_rectangle(
+            bounding_box := op.to_screen_for_rectangle(
                 entity.rendering_position,
                 entity.rendering_dimensions,
                 entity.origin,
@@ -455,7 +455,7 @@ main :: proc() {
                                 : fmt.ctprintf("Unlock for {} pets...?", entity.pet_cost)
                         ),
                         font     = .Sniglet,
-                        position =  Rendering_Vector2_Screen(to_screen_for_rectangle_uv(
+                        position =  op.V2_Screen(op.to_screen_for_rectangle_position(
                             entities[Static_Entity_Kind.Rolypoly].rendering_position,
                             entities[Static_Entity_Kind.Rolypoly].rendering_dimensions,
                             entities[Static_Entity_Kind.Rolypoly].origin,
@@ -577,13 +577,13 @@ main :: proc() {
 
                     op.push(&rendering_tasks, Rendering_Task_Texture {
                         reference  = .Padlock,
-                        position   = Rendering_Vector2_Screen(to_screen_for_rectangle_uv(
+                        position   = op.V2_Screen(op.to_screen_for_rectangle_position(
                             entity.rendering_position,
                             entity.rendering_dimensions,
                             entity.origin,
                             { 0, 0 },
                         )),
-                        dimensions = Rendering_Vector2_Cartesian {
+                        dimensions = op.V2_Squared {
                             ease_animation(0.05, 0.06, entity.lock_hover_animation, .Bounce_Out),
                             ease_animation(0.05, 0.06, entity.lock_hover_animation, .Bounce_Out),
                         },
@@ -806,7 +806,7 @@ main :: proc() {
                 op.push(&rendering_tasks, Rendering_Task_Dialogue_Bubble {
                     text     = "i dont have anything right now...",
                     font     = .Sniglet,
-                    position = Rendering_Vector2_Screen {
+                    position = op.V2_Screen {
                         merowchant_cat_position.x,
                         merowchant_cat_position.y - merowchant_cat_dimensions.y * 0.9,
                     },
@@ -865,7 +865,7 @@ main :: proc() {
         op.push(&rendering_tasks, Rendering_Task_Text {
             text     = fmt.ctprintf("Pets: {}", game_state.pets),
             font     = .Sniglet,
-            position = Rendering_Vector2_UV { -0.975, 0.975 },
+            position = op.V2_Uniform { -0.975, 0.975 },
             origin   = { -1, 1 },
             size     = 40,
         })
@@ -873,7 +873,7 @@ main :: proc() {
         op.push(&rendering_tasks, Rendering_Task_Text {
             text     = #config(VERSION, "???"),
             font     = .Sniglet,
-            position = Rendering_Vector2_UV { 1, 1 },
+            position = op.V2_Uniform { 1, 1 },
             origin   = { 1, 1 },
             size     = 20,
         })
@@ -909,14 +909,14 @@ main :: proc() {
 
                     text := fmt.ctprintf(
                         "    mouse : {{ {}, {} }}"     + "\n" +
-                        "cartesian : {{ %.2f, %.2f }}" + "\n" +
-                        "       uv : {{ %.2f, %.2f }}",
+                        "  squared : {{ %.2f, %.2f }}" + "\n" +
+                        "  uniform : {{ %.2f, %.2f }}",
                         dev_input.mouse.x,
                         dev_input.mouse.y,
-                        to_cartesian_from_screen(dev_input.mouse).x,
-                        to_cartesian_from_screen(dev_input.mouse).y,
-                        to_uv_from_screen(dev_input.mouse).x,
-                        to_uv_from_screen(dev_input.mouse).y,
+                        op.to_squared_from_screen(dev_input.mouse).x,
+                        op.to_squared_from_screen(dev_input.mouse).y,
+                        op.to_uniform_from_screen(dev_input.mouse).x,
+                        op.to_uniform_from_screen(dev_input.mouse).y,
                     )
 
                     op.push(&rendering_tasks, Rendering_Task_Text {
@@ -968,8 +968,8 @@ main :: proc() {
 
                         start        := tool.anchors[0].?
                         end          := tool.anchors[1].? or_else dev_input.mouse
-                        top_left     := Rendering_Vector2_Screen { min(start.x, end.x), min(start.y, end.y) }
-                        bottom_right := Rendering_Vector2_Screen { max(start.x, end.x), max(start.y, end.y) }
+                        top_left     := op.V2_Screen { min(start.x, end.x), min(start.y, end.y) }
+                        bottom_right := op.V2_Screen { max(start.x, end.x), max(start.y, end.y) }
 
                         if .Alt_Left in dev_input.pressed {
                             tool.centered_origin = !tool.centered_origin
@@ -991,16 +991,16 @@ main :: proc() {
                         op.push(&rendering_tasks, Rendering_Task_Line { // Horizontal line.
                             color      = raylib.Color { 81, 194, 25, 255 },
                             positions  = {
-                                Rendering_Vector2_Screen { top_left.x    , (top_left.y + bottom_right.y) / 2 },
-                                Rendering_Vector2_Screen { bottom_right.x, (top_left.y + bottom_right.y) / 2 },
+                                op.V2_Screen { top_left.x    , (top_left.y + bottom_right.y) / 2 },
+                                op.V2_Screen { bottom_right.x, (top_left.y + bottom_right.y) / 2 },
                             },
                         })
 
                         op.push(&rendering_tasks, Rendering_Task_Line { // Vertical line.
                             color      = raylib.Color { 81, 194, 25, 255 },
                             positions  = {
-                                Rendering_Vector2_Screen { (top_left.x + bottom_right.x) / 2, top_left.y     },
-                                Rendering_Vector2_Screen { (top_left.x + bottom_right.x) / 2, bottom_right.y },
+                                op.V2_Screen { (top_left.x + bottom_right.x) / 2, top_left.y     },
+                                op.V2_Screen { (top_left.x + bottom_right.x) / 2, bottom_right.y },
                             },
                         })
 
@@ -1044,18 +1044,18 @@ main :: proc() {
 
                 op.push(&rendering_tasks, Rendering_Task_Texture {
                     reference  = easel_canvas_texture,
-                    position   = Rendering_Vector2_Screen { easel_canvas_dest.x, easel_canvas_dest.y }, // TODO.
-                    dimensions = Rendering_Vector2_Screen { easel_canvas_dest.width, easel_canvas_dest.height }, // TODO.
+                    position   = op.V2_Screen { easel_canvas_dest.x, easel_canvas_dest.y }, // TODO.
+                    dimensions = op.V2_Screen { easel_canvas_dest.width, easel_canvas_dest.height }, // TODO.
                 })
 
                 if hovered_easel_canvas_cell_is_within {
 
                     op.push(&rendering_tasks, Rendering_Task_Rectangle {
-                        position = Rendering_Vector2_Screen { // TODO.
+                        position = op.V2_Screen { // TODO.
                             (easel_canvas_dest.x - easel_canvas_origin.x + f32(hovered_easel_canvas_cell_coordinate_x) * easel_canvas_cell_dimensions.x),
                             (easel_canvas_dest.y - easel_canvas_origin.y + f32(hovered_easel_canvas_cell_coordinate_y) * easel_canvas_cell_dimensions.y),
                         },
-                        dimensions = Rendering_Vector2_Screen(easel_canvas_cell_dimensions),
+                        dimensions = op.V2_Screen(easel_canvas_cell_dimensions),
                         origin     = { -1, 1 }, // TODO.
                     })
 
@@ -1090,7 +1090,7 @@ main :: proc() {
                     op.push(&rendering_tasks, Rendering_Task_Text {
                         text       = requirement_text,
                         font       = .Sniglet,
-                        position   = Rendering_Vector2_UV { -0.9, 0.5 },
+                        position   = op.V2_Uniform { -0.9, 0.5 },
                         origin     = { -1, 1 },
                         size       = 30,
                     })
@@ -1216,7 +1216,7 @@ Button_Widget :: struct {
         Button_Widget_Style_Texture,
     },
 
-    position         : Rendering_Vector2,
+    position         : op.V2_Render,
     mouse_hover_tint : raylib.Color,
     disabled         : bool,
     hidden           : bool,
@@ -1236,7 +1236,7 @@ Button_Widget_Style_Lame           :: struct {
 }
 
 Button_Widget_Style_Texture :: struct {
-    dimensions : Rendering_Vector2,
+    dimensions : op.V2_Render,
     reference  : Rendering_Texture_Reference,
 }
 
@@ -1278,8 +1278,8 @@ render_button_widget :: proc(
         case Button_Widget_Style_Lame: {
 
             op.push(rendering_tasks, Rendering_Task_Rectangle {
-                position          = Rendering_Vector2_Screen { bounding_box.x    , bounding_box.y      },
-                dimensions        = Rendering_Vector2_Screen { bounding_box.width, bounding_box.height },
+                position          = op.V2_Screen { bounding_box.x    , bounding_box.y      },
+                dimensions        = op.V2_Screen { bounding_box.width, bounding_box.height },
                 origin            = { -1, 1 },
                 fill              = tint,
                 roundness         = BUTTON_WIDGET_STYLE_LAME_ROUNDNESS,
@@ -1300,8 +1300,8 @@ render_button_widget :: proc(
 
             op.push(rendering_tasks, Rendering_Task_Texture {
                 reference  = style.reference,
-                position   = Rendering_Vector2_Screen { bounding_box.x    , bounding_box.y      },
-                dimensions = Rendering_Vector2_Screen { bounding_box.width, bounding_box.height },
+                position   = op.V2_Screen { bounding_box.x    , bounding_box.y      },
+                dimensions = op.V2_Screen { bounding_box.width, bounding_box.height },
                 origin     = { -1, 1 },
                 tint       = tint,
             })
@@ -1316,7 +1316,7 @@ render_button_widget :: proc(
 
 screen_bounding_box_for_button_widget :: proc(button : Button_Widget) -> raylib.Rectangle {
 
-    position := to_screen_for_position(button.position)
+    position := op.to_screen_for_position(button.position)
 
     switch style in button.style {
 
@@ -1340,7 +1340,7 @@ screen_bounding_box_for_button_widget :: proc(button : Button_Widget) -> raylib.
 
         case Button_Widget_Style_Texture: {
 
-            return to_screen_for_rectangle(
+            return op.to_screen_for_rectangle(
                 position   = button.position,
                 dimensions = style.dimensions,
                 origin     = { 0, 0 },
@@ -1365,7 +1365,7 @@ screen_bounding_box_for_button_widget :: proc(button : Button_Widget) -> raylib.
 
 Bakeable_Entity_Fields :: struct {
     base_position   : World_Vector2,
-    origin          : Rendering_Vector2_UV,
+    origin          : op.V2_Uniform,
     base_dimensions : World_Vector2,
 }
 
@@ -1389,8 +1389,8 @@ Entity :: struct {
     mouse_clicked         : bool,
     click_count           : int,
 
-    rendering_position    : Rendering_Vector2,
-    rendering_dimensions  : Rendering_Vector2,
+    rendering_position    : op.V2_Render,
+    rendering_dimensions  : op.V2_Render,
 
 }
 
@@ -1460,7 +1460,7 @@ create_flimsy_friend :: proc(
 //
 
 Input :: struct {
-    mouse    : Rendering_Vector2_Screen,
+    mouse    : op.V2_Screen,
     pressed  : bit_set[Input_Button],
     down     : bit_set[Input_Button],
     released : bit_set[Input_Button],
@@ -1481,7 +1481,7 @@ get_input :: proc(dev_focus : bool) -> (
 ) {
 
     main_input = Input {
-        mouse    = Rendering_Vector2_Screen(raylib.GetMousePosition()),
+        mouse    = op.V2_Screen(raylib.GetMousePosition()),
         pressed  = {}, // Filled out in a bit...
         down     = {}, // "
         released = {}, // "
