@@ -342,7 +342,7 @@ main :: proc() {
             update_animation(&entity.death_animation)
 
             if entity.death_animation.value == 1 {
-                raylib.PlaySound(BAKED_sounds[.Pop])
+                raylib.PlaySound(BAKED_SOUNDS[.Pop])
                 should_be_removed = true
             }
 
@@ -387,7 +387,7 @@ main :: proc() {
                                         rand.int31_max(BAKED_SOUND_PAPER_COUNT)
                                     )
 
-                                    raylib.PlaySound(BAKED_sounds[paper_sound_handle])
+                                    raylib.PlaySound(BAKED_SOUNDS[paper_sound_handle])
 
                                 }
 
@@ -441,9 +441,9 @@ main :: proc() {
                 if (
                     old_lock_hover_animation_value    <  0.5 &&
                     entity.lock_hover_animation.value >= 0.5 &&
-                    !raylib.IsSoundPlaying(BAKED_sounds[.Padlock])
+                    !raylib.IsSoundPlaying(BAKED_SOUNDS[.Padlock])
                 ) {
-                    raylib.PlaySound(BAKED_sounds[.Padlock])
+                    raylib.PlaySound(BAKED_SOUNDS[.Padlock])
                 }
 
                 if entity.mouse_hover_animation.value == 1 {
@@ -500,13 +500,13 @@ main :: proc() {
                     } else if game_state.pets < entity.pet_cost {
 
                         control_animation(&entity.lock_hover_animation, .Clear_Increase_Reset)
-                        raylib.PlaySound(BAKED_sounds[.Padlock_Locked])
+                        raylib.PlaySound(BAKED_SOUNDS[.Padlock_Locked])
 
                     } else {
 
                         game_state.pets -= entity.pet_cost
                         entity.locked    = false
-                        raylib.PlaySound(BAKED_sounds[.Padlock_Unlocked])
+                        raylib.PlaySound(BAKED_SOUNDS[.Padlock_Unlocked])
 
                     }
 
@@ -520,23 +520,23 @@ main :: proc() {
 
                         case .Easel: {
                             scene = .Easel
-                            raylib.PlaySound(BAKED_sounds[.Easel_Open])
+                            raylib.PlaySound(BAKED_SOUNDS[.Easel_Open])
                         }
 
                         case .Merowchant: {
                             scene = .Merowchant
-                            raylib.PlaySound(BAKED_sounds[.Merowchant_Open])
+                            raylib.PlaySound(BAKED_SOUNDS[.Merowchant_Open])
                         }
 
                         case .Flimsy_Friend: {
 
                             if entity.click_count < FLIMSY_FRIEND_CLICKS_TO_POP {
 
-                                raylib.PlaySound(BAKED_sounds[.Tap])
+                                raylib.PlaySound(BAKED_SOUNDS[.Tap])
 
                             } else {
 
-                                raylib.PlaySound(BAKED_sounds[.Pop])
+                                raylib.PlaySound(BAKED_SOUNDS[.Pop])
                                 should_be_removed = true
 
                             }
@@ -640,11 +640,11 @@ main :: proc() {
                 )
 
                 raylib.SetSoundVolume(
-                    BAKED_sounds[xylo_sound_handle],
+                    BAKED_SOUNDS[xylo_sound_handle],
                     f32(clamp(time.duration_seconds(time.diff(time_since_last_pet_sound_effect, time.now())) * 2, 0, 1))
                 )
 
-                raylib.PlaySound(BAKED_sounds[xylo_sound_handle])
+                raylib.PlaySound(BAKED_SOUNDS[xylo_sound_handle])
 
                 time_since_last_pet_sound_effect = time.now()
 
@@ -762,7 +762,7 @@ main :: proc() {
             raylib.ImageClearBackground(&easel_canvas_image, EASEL_DEFAULT_COLOR)
 
             scene = .Main
-            raylib.PlaySound(BAKED_sounds[.Easel_Close])
+            raylib.PlaySound(BAKED_SOUNDS[.Easel_Close])
 
         }
 
@@ -815,7 +815,7 @@ main :: proc() {
             }
 
             if hovering_merowchant_cat && .Mouse_Left in main_input.pressed {
-                raylib.PlaySound(BAKED_sounds[.Merowchant_Meow])
+                raylib.PlaySound(BAKED_SOUNDS[.Merowchant_Meow])
             }
 
         }
@@ -834,12 +834,12 @@ main :: proc() {
 
         if easel_canvas_back_button.pressed || (scene == .Easel && .Escape in main_input.pressed) {
             scene = .Main
-            raylib.PlaySound(BAKED_sounds[.Easel_Close])
+            raylib.PlaySound(BAKED_SOUNDS[.Easel_Close])
         }
 
         if merowchant_back_button.pressed || (scene == .Merowchant && .Escape in main_input.pressed) {
             scene = .Main
-            raylib.PlaySound(BAKED_sounds[.Merowchant_Close])
+            raylib.PlaySound(BAKED_SOUNDS[.Merowchant_Close])
         }
 
         if .Space in main_input.pressed {
@@ -1117,12 +1117,12 @@ main :: proc() {
                 MEROWCHANT_TABLE_Y :: 400
 
                 raylib.DrawTexturePro(
-                    texture = BAKED_textures[.Merowchant_Background],
+                    texture = BAKED_TEXTURES[.Merowchant_Background],
                     source  = {
                         0,
                         0,
-                        cast(f32) BAKED_textures[.Merowchant_Background].width,
-                        cast(f32) BAKED_textures[.Merowchant_Background].height,
+                        cast(f32) BAKED_TEXTURES[.Merowchant_Background].width,
+                        cast(f32) BAKED_TEXTURES[.Merowchant_Background].height,
                     },
                     dest = {
                         0,
@@ -1136,12 +1136,12 @@ main :: proc() {
                 )
 
                 raylib.DrawTexturePro(
-                    texture = BAKED_textures[.Merowchant_Cat],
+                    texture = BAKED_TEXTURES[.Merowchant_Cat],
                     source  = {
                         0,
                         0,
-                        cast(f32) BAKED_textures[.Merowchant_Cat].width,
-                        cast(f32) BAKED_textures[.Merowchant_Cat].height,
+                        cast(f32) BAKED_TEXTURES[.Merowchant_Cat].width,
+                        cast(f32) BAKED_TEXTURES[.Merowchant_Cat].height,
                     },
                     dest = {
                         merowchant_cat_position.x,
@@ -1155,12 +1155,12 @@ main :: proc() {
                 )
 
                 raylib.DrawTexturePro(
-                    texture = BAKED_textures[.Merowchant_Table],
+                    texture = BAKED_TEXTURES[.Merowchant_Table],
                     source  = {
                         0,
                         0,
-                        cast(f32) BAKED_textures[.Merowchant_Table].width,
-                        cast(f32) BAKED_textures[.Merowchant_Table].height,
+                        cast(f32) BAKED_TEXTURES[.Merowchant_Table].width,
+                        cast(f32) BAKED_TEXTURES[.Merowchant_Table].height,
                     },
                     dest = {
                         0,
@@ -1323,7 +1323,7 @@ screen_bounding_box_for_button_widget :: proc(button : Button_Widget) -> raylib.
         case Button_Widget_Style_Lame: {
 
             measurement := raylib.MeasureTextEx(
-                font     = BAKED_fonts[style.font],
+                font     = BAKED_FONTS[style.font],
                 text     = style.text,
                 fontSize = style.size,
                 spacing  = 0,

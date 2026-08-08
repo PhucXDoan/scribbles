@@ -1,10 +1,9 @@
 package main
 
-// This file defines data that are baked into the executable and thus
-// are always available. For debug builds, the baked file is loaded at
-// run-time, but for release builds, it's part of the executable so that
-// the game will not have any other dependencies besides the optional save
-// file.
+// This file defines data that are baked into the executable and thus are
+// always available. For debug builds, the baked file is loaded at run-time,
+// but for release builds, it's part of the executable so that the game will
+// not have any other dependencies besides the optional save file.
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -17,7 +16,7 @@ BAKED_STATIC_ENTITY_DIRECTORY_PATH :: "./media/static_entities"
 
 
 
-BAKED_textures :  [Baked_Texture]raylib.Texture
+BAKED_TEXTURES :  [Baked_Texture]raylib.Texture
 Baked_Texture  :: enum {
     nil,
     Submit_Button,
@@ -32,7 +31,7 @@ Baked_Texture  :: enum {
 
 
 
-BAKED_sounds            :  [Baked_Sound]raylib.Sound
+BAKED_SOUNDS            :  [Baked_Sound]raylib.Sound
 BAKED_SOUND_XYLO_COUNT  :: 3
 BAKED_SOUND_PAPER_COUNT :: 3
 Baked_Sound             :: enum u32 {
@@ -62,7 +61,7 @@ Baked_Sound             :: enum u32 {
 
 
 
-BAKED_fonts :  [Baked_Font]raylib.Font
+BAKED_FONTS :  [Baked_Font]raylib.Font
 Baked_Font  :: enum {
     nil,
     Sniglet,
@@ -234,33 +233,33 @@ bake :: proc(save_static_entity_data : bool, entities : []Entity) {
                         image := raylib.LoadImageFromMemory(".png", raw_data(asset_data), asset_size)
                         defer raylib.UnloadImage(image)
 
-                        if BAKED_textures[asset_handle] != {} {
-                            raylib.UnloadTexture(BAKED_textures[asset_handle])
-                            BAKED_textures[asset_handle] = {}
+                        if BAKED_TEXTURES[asset_handle] != {} {
+                            raylib.UnloadTexture(BAKED_TEXTURES[asset_handle])
+                            BAKED_TEXTURES[asset_handle] = {}
                         }
 
-                        BAKED_textures[asset_handle] = raylib.LoadTextureFromImage(image)
+                        BAKED_TEXTURES[asset_handle] = raylib.LoadTextureFromImage(image)
 
                     } else when Baked_XYZ == Baked_Sound {
 
                         wave := raylib.LoadWaveFromMemory(".wav", raw_data(asset_data), asset_size)
                         defer raylib.UnloadWave(wave)
 
-                        if BAKED_sounds[asset_handle] != {} {
-                            raylib.UnloadSound(BAKED_sounds[asset_handle])
-                            BAKED_sounds[asset_handle] = {}
+                        if BAKED_SOUNDS[asset_handle] != {} {
+                            raylib.UnloadSound(BAKED_SOUNDS[asset_handle])
+                            BAKED_SOUNDS[asset_handle] = {}
                         }
 
-                        BAKED_sounds[asset_handle] = raylib.LoadSoundFromWave(wave)
+                        BAKED_SOUNDS[asset_handle] = raylib.LoadSoundFromWave(wave)
 
                     } else when Baked_XYZ == Baked_Font {
 
-                        if BAKED_fonts[asset_handle] != {} {
-                            raylib.UnloadFont(BAKED_fonts[asset_handle])
-                            BAKED_fonts[asset_handle] = {}
+                        if BAKED_FONTS[asset_handle] != {} {
+                            raylib.UnloadFont(BAKED_FONTS[asset_handle])
+                            BAKED_FONTS[asset_handle] = {}
                         }
 
-                        BAKED_fonts[asset_handle] = raylib.LoadFontFromMemory(
+                        BAKED_FONTS[asset_handle] = raylib.LoadFontFromMemory(
                             fileType       = ".ttf",
                             fileData       = raw_data(asset_data),
                             dataSize       =          asset_size,
