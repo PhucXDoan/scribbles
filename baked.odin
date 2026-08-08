@@ -90,17 +90,16 @@ bake :: proc(save_static_entity_data : bool, entities : []Entity) {
 
             for static_entity_kind in Static_Entity_Kind {
 
-                static_entity_file_path   := fmt.tprintf("{}/{}", BAKED_STATIC_ENTITY_DIRECTORY_PATH, static_entity_kind)
-                static_entity_file_handle := os.open(static_entity_file_path, os.O_CREATE | os.O_TRUNC | os.O_APPEND) or_else panic("Failed.")
-                defer os.close(static_entity_file_handle)
-
+                file_path    := fmt.tprintf("{}/{}", BAKED_STATIC_ENTITY_DIRECTORY_PATH, static_entity_kind)
                 file_content := json.marshal(
                     v         = entities[static_entity_kind].bakeable_fields,
                     opt       = { pretty = true, use_spaces = true },
                     allocator = context.temp_allocator,
                 ) or_else panic("Failed.")
 
-                _ = os.write(static_entity_file_handle, file_content) or_else panic("Failed.")
+                if os.write_entire_file(file_path, file_content) != nil {
+                    panic("Failed.")
+                }
 
             }
 
